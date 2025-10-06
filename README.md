@@ -12,31 +12,9 @@ Run `npm run start` to start the application in production mode.
 
 Run `npm run dev` to start the application in development mode with nodemon.
 
-## Endpoints
+## Configuration
 
-### GET /
-
-Returns a simple message.
-
-### GET /users
-
-Returns a list of users.
-
-### GET /users/:id
-
-Returns a user by ID.
-
-### POST /users
-
-Creates a new user.
-
-### PUT /users/:id
-
-Updates a user by ID.
-
-### DELETE /users/:id
-
-Deletes a user by ID.
+The application uses a `.env` file to store environment variables. You can create a `.env` file in the root directory of the project with the following format:
 
 ## Environment Variables
 
@@ -46,7 +24,3 @@ The application uses the following environment variables:
 - `MONGO_URI`: The MongoDB connection string.
 - `JWT_SECRET`: The secret key for JWT authentication.
 - `JWT_EXPIRE`: The expiration time for JWT tokens.
-
-## Configuration
-
-The application uses a `.env` file to store environment variables. You can create a `.env` file in the root directory of the project with the following format:

@@ -1,26 +1,22 @@
-# Express README
+## Instalación
 
-This is a simple Express application for a RESTful API.
+Ejecuta `npm install` para instalar las dependencias.
 
-## Installation
+## Ejecución de la aplicación
 
-Run `npm install` to install the dependencies.
+Ejecuta `npm run start` para iniciar la aplicación en modo de producción.
 
-## Running the application
+Ejecuta `npm run dev` para iniciar la aplicación en modo de desarrollo con nodemon.
 
-Run `npm run start` to start the application in production mode.
+## Configuración
 
-Run `npm run dev` to start the application in development mode with nodemon.
+La aplicación utiliza un archivo `.env` para almacenar variables de entorno. Puedes crear un archivo `.env` en el directorio raiz del proyecto con el siguiente formato:
 
-## Configuration
+## Variables de entorno
 
-The application uses a `.env` file to store environment variables. You can create a `.env` file in the root directory of the project with the following format:
+La aplicaci n utiliza las siguientes variables de entorno:
 
-## Environment Variables
-
-The application uses the following environment variables:
-
-- `PORT`: The port to listen on.
-- `MONGO_URI`: The MongoDB connection string.
-- `JWT_SECRET`: The secret key for JWT authentication.
-- `JWT_EXPIRE`: The expiration time for JWT tokens.
+- `PORT`: El puerto para escuchar.
+- `MONGO_URI`: La cadena de conexión de MongoDB.
+- `JWT_SECRET`: La clave secreta para autenticación con JWT.
+- `JWT_EXPIRE`: El tiempo de expiración para tokens JWT.

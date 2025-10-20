@@ -2,6 +2,13 @@ const express = require('express');
 const app = express();
 const userRoutes = require('./routes/users');
 const mongoose = require('mongoose');
+const cors = require('cors');
+
+app.use(cors({
+    origin: 'http://localhost:5173', // Cambia esto a la URL de tu frontend
+    credentials: true, // Habilita el envío de cookies
+}));
+
 require('dotenv').config();
 app.use(express.json());
 

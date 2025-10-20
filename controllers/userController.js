@@ -50,6 +50,7 @@ const login = async (req, res) => {
                 console.error(err);
                 return res.status(400).send({ msg: err.message });
             }
+            res.cookie('token', token, { httpOnly: true })
             res.status(200).send({ token });
         });
     } catch (error) {

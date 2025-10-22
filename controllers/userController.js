@@ -27,7 +27,12 @@ const register = async (req, res) => {
                 console.error(err);
                 return res.status(400).send({ msg: err.message });
             }
-            res.status(201).send({ msg: "User registered successfully", token });
+            res.cookie('token', token, {
+                httpOnly: true,
+                sameSite: 'lax',
+                maxAge: 24 * 60 * 60 * 1000 // 1 día
+            });
+            res.status(201).send({ msg: "User registered successfully" });
         });
     } catch (error) {
         console.error(error);
@@ -41,17 +46,20 @@ const login = async (req, res) => {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
         if (!user) return res.status(400).send({ msg: 'User not found' });
-        console.log("User found:", user);
         const isMatch = await bcrypt.compare(password, user.password)
-        console.log("Password match:", isMatch);
         if (!isMatch) return res.status(400).send({ msg: 'Invalid password' });
         jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' }, (err, token) => {
             if (err) {
                 console.error(err);
                 return res.status(400).send({ msg: err.message });
             }
-            res.cookie('token', token, { httpOnly: true })
-            res.status(200).send({ token });
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production', // true en producción
+                sameSite: 'lax',
+                maxAge: 24 * 60 * 60 * 1000 // 1 día
+            });
+            res.status(200).send({ msg: 'Login successful', user });
         });
     } catch (error) {
         console.error(error);
@@ -70,9 +78,19 @@ const me = async (req, res) => {
     }
 };
 
+const logout = async (req, res) => {
+    try {
+        res.clearCookie('token');
+        res.status(200).send({ msg: 'Logged out successfully' });
+    } catch (error) {
+        console.error(error);
+        return res.status(400).send({ msg: error.message });
+    }
+};
 
 module.exports = {
     register,
     login,
-    me
+    me,
+    logout
 };

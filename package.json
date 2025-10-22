@@ -1,7 +1,8 @@
 {
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "seed": "node seeds/stores.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

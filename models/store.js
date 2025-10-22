@@ -17,8 +17,9 @@ const storeSchema = new mongoose.Schema({
         facebook: { type: String },
         web: { type: String }
     },
-    timestamps: true,
     deletedAt: { type: Date }
+}, {
+    timestamps: true
 });
 
 module.exports = mongoose.model('Store', storeSchema);  

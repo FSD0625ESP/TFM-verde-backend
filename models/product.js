@@ -9,8 +9,9 @@ const productSchema = new mongoose.Schema({
     status: { type: String, enum: ['onSale', 'exhibition'], default: 'onSale' },
     stock: { type: Number, required: true },
     categories: { type: [mongoose.Schema.Types.ObjectId], ref: 'Category', required: true },
-    timpestamps: true,
     deletedAt: { type: Date }
+}, {
+    timestamps: true
 });
 
 module.exports = mongoose.model('Product', productSchema);

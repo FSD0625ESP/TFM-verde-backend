@@ -3,6 +3,9 @@ const app = express();
 const userRoutes = require('./routes/users');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+
+app.use(cookieParser());
 
 app.use(cors({
     origin: 'http://localhost:5173', // Cambia esto a la URL de tu frontend

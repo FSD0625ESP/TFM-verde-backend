@@ -4,11 +4,13 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
-    password: { type: String, required: true },
+    password: { type: String, required: function () { return this.provider !== 'google'; } },
     role: { type: String, enum: ['customer', 'seller', 'admin'], default: 'customer' },
     profileImage: { type: String },
     verifiedAt: { type: Date },
     deletedAt: { type: Date },
+    provider: { type: String, enum: ['local', 'google'], default: 'local' },
+    googleId: { type: String },
 }, {
     timestamps: true,
 });

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{EMAIL_TITLE}}</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        background-color: #26a69a;
+        color: white;
+        padding: 30px;
+        text-align: center;
+        border-radius: 8px 8px 0 0;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: bold;
+      }
+      .content {
+        background-color: white;
+        padding: 40px;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .footer {
+        text-align: center;
+        background-color: #26a69a;
+        padding: 20px;
+        color: #fff;
+        font-size: 14px;
+      }
+      .social-links {
+        margin: 20px 0;
+        text-align: center;
+      }
+      .social-links a {
+        color: #26a69a;
+        text-decoration: none;
+        margin: 0 10px;
+      }
+      .button {
+        display: inline-block;
+        padding: 12px 24px;
+        background-color: #26a69a;
+        color: white !important;
+        text-decoration: none;
+        border-radius: 4px;
+        margin: 20px 0;
+      }
+      .disclaimer {
+        font-size: 12px;
+        color: #dbdbdb;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>{{EMAIL_TITLE}}</h1>
+      </div>
+      <div class="content">
+        {{{EMAIL_BODY_CONTENT}}} {{#if EMAIL_CTA_BUTTON}}
+        <div style="text-align: center">
+          <a
+            href="{{{EMAIL_CTA_URL}}}"
+            class="button"
+            target="_blank"
+            rel="noopener noreferrer"
+            >{{EMAIL_CTA_BUTTON}}</a
+          >
+        </div>
+        {{/if}}
+      </div>
+      <div class="footer">
+        <p>Enviado por Meraki</p>
+        <p class="disclaimer">
+          Meraki Marketplace © {{CURRENT_YEAR}}. Todos los derechos reservados.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

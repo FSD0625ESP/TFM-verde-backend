@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const User = require("../models/user");
+const TemporalToken = require("../models/temporalToken");
 const { OAuth2Client } = require("google-auth-library");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -191,16 +192,62 @@ const googleLogin = async (req, res) => {
   }
 };
 
-const verifyForgotPasswordToken = async (req, res) => {
+const generateForgotPasswordToken = async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user)
       return res.status(404).send({ msg: "No se encontro el usuario" });
-    // TODO: Aquí generarías un token y enviarías un email al usuario con un enlace para restablecer la contraseña
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    const temporalToken = new TemporalToken({ userId: user._id, token });
+    await temporalToken.save();
+
+    // Enviar email de restablecimiento
+    const { sendPasswordResetEmail } = require('../services/emails');
+    await sendPasswordResetEmail({
+      to: user.email,
+      firstName: user.firstName,
+      resetToken: token
+    });
+
     res
       .status(200)
       .send({ msg: "Se ha enviado un correo para restablecer la contraseña" });
+  } catch (error) {
+    console.error(error);
+    return res.status(400).send({ msg: error.message });
+  }
+};
+
+// const temporalTokenSchema = new mongoose.Schema({
+//     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+//     token: { type: String, required: true },
+//     expiredAt: { type: Date, default: Date.now(), expires: 3600000 } // 1 hour
+// });
+
+
+const verifyForgotPasswordToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    console.log(req.query);
+    const temporalToken = await TemporalToken.findOne({ token });
+    if (!temporalToken)
+      return res.status(404).send({ msg: "No se encontro el token" });
+
+    // temporalToken.expiredAt stores the creation time. Consider token expired if older than 1 hour.
+    const createdAt = new Date(temporalToken.expiredAt).getTime();
+    const ageMs = Date.now() - createdAt;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    if (ageMs > ONE_HOUR_MS) {
+      return res.status(404).send({ msg: "El token ha expirado" });
+    }
+
+    // opcional: devolver el email asociado para mejorar la UX en frontend
+    const user = await User.findById(temporalToken.userId).select('email');
+    res.status(200).send({ token, email: user?.email });
   } catch (error) {
     console.error(error);
     return res.status(400).send({ msg: error.message });
@@ -213,5 +260,6 @@ module.exports = {
   me,
   logout,
   googleLogin,
+  generateForgotPasswordToken,
   verifyForgotPasswordToken,
 };

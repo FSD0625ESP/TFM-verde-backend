@@ -37,72 +37,143 @@ const getAllOfferProducts = async (req, res) => {
   }
 };
 
+const getProductById = async (req, res) => {
+  try {
+    const productById = await product
+      .findById(req.params.id)
+      .populate("storeId", ["name", "logo"]);
+    return res.status(200).json(productById);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
 
 // search products with filters and pagination
-const searchProductsFunction = async (categories, offer, min, max, page = 1, text) => {
+const searchProductsFunction = async (
+  page = 1,
+  text = "",
+  categories = [],
+  offer = undefined,
+  min = 0,
+  max = 1000
+) => {
   const limit = 20;
   const query = { deletedAt: { $exists: false } };
-  console.log("text", text);
-  console.log("categories", categories);
+
+  // normalize numeric params
+  const pageNum = Number(page) || 1;
+  const minNum = Number(min) || 0;
+  const maxNum = Number(max) || 500;
+
+  console.log("\n[Backend] Building MongoDB query");
+  console.log("[Backend] Normalized params:", {
+    pageNum,
+    text,
+    categories:
+      typeof categories === "string" ? categories.split(",") : categories,
+    offer,
+    minNum,
+    maxNum,
+  });
 
   if (text) {
-    // title contains text
+    // title or description contains text (case-insensitive)
     query.$or = [
-      { title: { $regex: `^${text}$`, $options: 'i' } },
-      { title: { $regex: `.*${text}.*`, $options: 'i' } },
-      { description: { $regex: `^${text}$`, $options: 'i' } },
-      { description: { $regex: `.*${text}.*`, $options: 'i' } },
+      { title: { $regex: `^${text}$`, $options: "i" } },
+      { title: { $regex: `.*${text}.*`, $options: "i" } },
+      { description: { $regex: `^${text}$`, $options: "i" } },
+      { description: { $regex: `.*${text}.*`, $options: "i" } },
     ];
+  }
 
-  };
-
-  // categories — array de ObjectId → que contenga todas las que pediste
+  // categories — accept array or comma-separated string
   if (categories) {
-    // aceptar ambos: array o string coma
     const cats = Array.isArray(categories)
       ? categories
-      : categories.split(',');
+      : typeof categories === "string"
+      ? categories.split(",")
+      : [];
 
-    query.categories = { $all: cats };
+    console.log("[Backend] Processing categories:", cats);
+
+    // convert to ObjectId instances if possible
+    const catObjectIds = cats
+      .filter((c) => c !== undefined && c !== null && String(c).trim() !== "")
+      .map((c) => {
+        try {
+          const cleanId = String(c).trim();
+          return new mongoose.Types.ObjectId(cleanId);
+        } catch (err) {
+          console.log(
+            "[Backend] Error converting category to ObjectId:",
+            c,
+            err.message
+          );
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    console.log("[Backend] Converted category ObjectIds:", catObjectIds);
+
+    if (catObjectIds.length > 0) {
+      // Use $in for products that match ANY of the selected categories
+      query.categories = { $in: catObjectIds };
+      console.log("[Backend] Added categories filter to query");
+    }
   }
 
-  // offer
-  if (offer !== undefined) {
-    query.oferta = offer === 'true';
+  // offer - solo aplicar el filtro si offer es true
+  if (offer === "true" || offer === true) {
+    query.oferta = true;
   }
+  // si offer es false, no aplicamos filtro (muestra todos)
 
   // price between
-  // formato esperado:  "min-max"
-  if (min && max) {
-    query.price = { $gte: min, $lte: max };
+  if (!Number.isNaN(minNum) && !Number.isNaN(maxNum)) {
+    query.price = { $gte: minNum, $lte: maxNum };
   }
+
+  console.log("[Backend] Final MongoDB query:", JSON.stringify(query, null, 2));
 
   const products = await product
     .find(query)
     .populate("storeId", ["name", "logo"])
     .limit(limit)
-    .skip((page - 1) * limit);
+    .skip((pageNum - 1) * limit);
 
+  console.log(
+    `[Backend] Found ${products.length} products for page ${pageNum}`
+  );
   return products;
 };
 
 const searchProducts = async (req, res) => {
+  console.debug("[Backend] Received search request");
+  console.debug("[Backend] Raw query params:", req.query);
+
   try {
-    const { categories, offer, price, page, text } = req.query;
-    const products = await searchProductsFunction(categories, offer, price, page, text);
+    const { page, text, categories, offer, min, max } = req.query;
+    const products = await searchProductsFunction(
+      page,
+      text,
+      categories,
+      offer,
+      min,
+      max
+    );
+    console.log(`[Backend] Found ${products.length} products`);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
 
-
-
-
 module.exports = {
   getAllProducts,
   getAllFeaturedProducts,
   getAllOfferProducts,
+  getProductById,
   searchProductsFunction,
-  searchProducts
+  searchProducts,
 };

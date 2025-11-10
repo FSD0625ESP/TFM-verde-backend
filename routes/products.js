@@ -4,12 +4,15 @@ const {
   getAllProducts,
   getAllFeaturedProducts,
   getAllOfferProducts,
-  searchProducts
+  getProductById,
+  searchProductsFunction,
+  searchProducts,
 } = require("../controllers/productController");
 
 router.get("/all", getAllProducts);
 router.get("/featured", getAllFeaturedProducts);
 router.get("/offer", getAllOfferProducts);
-router.post("/search", searchProducts);
+router.get("/search", searchProducts);
+router.get("/:id", getProductById);
 
 exports = module.exports = router;

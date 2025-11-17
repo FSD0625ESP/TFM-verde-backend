@@ -3,12 +3,27 @@ const Store = require("../models/store");
 const Product = require("../models/product");
 const User = require("../models/user");
 const Category = require("../models/category");
+const Review = require("../models/review");
 const bcrypt = require("bcrypt");
+//const generateSlug = require("../utils/generateSlug");
 // Removed fs and path requires since we will use inline SVG data URIs instead of writing files to disk.
 require("dotenv").config();
 
 const MONGO_URI = process.env.MONGO_URI;
 console.log("MONGODB_URI:", MONGO_URI);
+
+const slugify = require("slugify");
+
+const generateSlug = (text) => {
+  if (!text) return "";
+
+  return slugify(text, {
+    lower: true, // convierte a minúsculas
+    strict: true, // elimina caracteres especiales
+    locale: "es", // soporte para tildes y ñ
+    trim: true,
+  });
+};
 
 const createSeeds = async () => {
   try {
@@ -17,6 +32,8 @@ const createSeeds = async () => {
     await Product.deleteMany({});
     await User.deleteMany({});
     await Category.deleteMany({});
+    await Review.deleteMany({});
+
     // Crear un usuario administrador y algunos vendedores
     const adminUser = await User.create({
       email: "admin@example.com",
@@ -25,6 +42,18 @@ const createSeeds = async () => {
       password: await bcrypt.hash("admin123@", 10),
       role: "admin",
     });
+
+    const customers = [];
+    for (let i = 1; i <= 10; i++) {
+      const customer = await User.create({
+        email: `customer${i}@example.com`,
+        firstName: `Customer${i}`,
+        lastName: `Surname${i}`,
+        password: await bcrypt.hash("Customer123@", 10),
+        role: "customer",
+      });
+      customers.push(customer);
+    }
 
     const sellers = [];
     for (let i = 1; i <= 10; i++) {
@@ -112,6 +141,7 @@ const createSeeds = async () => {
       const store = await Store.create({
         ownerId: sellers[i]._id,
         name: storeNames[i],
+        slug: generateSlug(storeNames[i]),
         description: `Una tienda única especializada en productos artesanales y de diseño - ${storeNames[i]}`,
         logo: logoDataUri,
         image: `https://picsum.photos/600/400?random=${i}`,
@@ -155,6 +185,7 @@ const createSeeds = async () => {
         await Product.create({
           storeId: store._id,
           title: `${productTypes[j]} ${i + 1}`,
+          slug: generateSlug(`${productTypes[j]} ${i + 1}`),
           description: `Hermoso ${productTypes[j].toLowerCase()} artesanal de ${
             storeNames[i]
           }`,
@@ -170,6 +201,39 @@ const createSeeds = async () => {
           stock: Math.floor(Math.random() * 50) + 1,
           categories: [productCategory],
         });
+      }
+
+      //const customers = await User.find({ role: "customer" });
+
+      // crear reviews aleatorios para cada tienda
+      const numReviews = Math.floor(Math.random() * 5) + 1; // 1..5
+      for (let j = 0; j < numReviews; j++) {
+        const rating = Math.floor(Math.random() * 5) + 1; // 1..5
+        const review = await Review.create({
+          storeId: store._id,
+          userId: customers[i]._id,
+          rating: rating,
+          comment: `Comentario ${j + 1} para la tienda ${
+            store.name
+          }. Rating: ${rating}`,
+        });
+      }
+
+      // crear reviews aleatorias para cada producto de la tienda
+      const products = await Product.find({ storeId: store._id });
+      for (const product of products) {
+        const numReviews = Math.floor(Math.random() * 6) + 1; // 1..6
+        for (let j = 0; j < numReviews; j++) {
+          const rating = Math.floor(Math.random() * 5) + 1; // 1..5
+          const review = await Review.create({
+            productId: product._id,
+            userId: customers[i]._id,
+            rating: rating,
+            comment: `Comentario ${j + 1} para el producto ${
+              product.title
+            } de la tienda ${store.name}. Rating: ${rating}`,
+          });
+        }
       }
     }
     console.log("Seeds creados exitosamente!");

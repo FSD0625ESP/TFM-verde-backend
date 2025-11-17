@@ -13,6 +13,6 @@ router.get("/all", getAllProducts);
 router.get("/featured", getAllFeaturedProducts);
 router.get("/offer", getAllOfferProducts);
 router.get("/search", searchProducts);
-router.get("/:id", getProductById);
+router.get("/product/:id", getProductById);
 
 exports = module.exports = router;

@@ -8,7 +8,7 @@ const getAllProducts = async (req, res) => {
   try {
     const products = await product
       .find({})
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -19,7 +19,7 @@ const getAllFeaturedProducts = async (req, res) => {
   try {
     const products = await product
       .find({ destacado: true })
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -30,7 +30,7 @@ const getAllOfferProducts = async (req, res) => {
   try {
     const products = await product
       .find({ oferta: true })
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -41,7 +41,7 @@ const getProductById = async (req, res) => {
   try {
     const productById = await product
       .findById(req.params.id)
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(productById);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -138,7 +138,7 @@ const searchProductsFunction = async (
 
   const products = await product
     .find(query)
-    .populate("storeId", ["name", "logo"])
+    .populate("storeId", ["name", "slug", "logo"])
     .limit(limit)
     .skip((pageNum - 1) * limit);
 

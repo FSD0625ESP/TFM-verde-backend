@@ -11,8 +11,12 @@ const chatSchema = new mongoose.Schema({
             timestamp: { type: Date, default: Date.now }
         }
     ],
-    timestamps: true,
-    deletedAt: { type: Date }
+    // Tiempos de última lectura por participante
+    customerLastReadAt: { type: Date, default: null },
+    ownerLastReadAt: { type: Date, default: null },
+    deletedAt: { type: Date },
+}, {
+    timestamps: true
 });
 
 module.exports = mongoose.model('Chat', chatSchema);

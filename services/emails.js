@@ -16,7 +16,6 @@ const emailConfig = {
         rejectUnauthorized: process.env.NODE_ENV === 'production' ? true : false
     }
 };
-console.log(emailConfig);
 
 // Crear el transportador de nodemailer
 const transporter = nodemailer.createTransport(emailConfig);
@@ -67,11 +66,9 @@ async function sendEmail({ to, subject, templateData, templateName = 'defaultTem
 
         // Enviar el email
         const info = await transporter.sendMail(mailOptions);
-        console.log('Email enviado:', info.messageId);
         return { success: true, messageId: info.messageId };
 
     } catch (error) {
-        console.error('Error al enviar email:', error);
         throw error;
     }
 }
@@ -92,7 +89,6 @@ async function sendPasswordResetEmail({ to, firstName, resetToken }) {
     // Construir la URL de restablecimiento de contraseña
     const resetUrl = `${frontendUrl}/login/forgotPassword/${resetToken}`;
 
-    console.log('Reset URL para email:', resetUrl);
 
     const templateData = {
         EMAIL_BODY_CONTENT: `

@@ -8,7 +8,6 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Controlador para el registro de usuarios
 const register = async (req, res) => {
-  console.log("Registering user:", req.body);
   try {
     const { email, password, firstName, lastName } = req.body;
     let { role } = req.body;
@@ -46,7 +45,6 @@ const register = async (req, res) => {
       { expiresIn: "1d" },
       (err, token) => {
         if (err) {
-          console.error(err);
           return res.status(400).send({ msg: err.message });
         }
         // build a safe user object to return (no password)
@@ -67,7 +65,6 @@ const register = async (req, res) => {
       }
     );
   } catch (error) {
-    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -77,16 +74,15 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).send({ msg: "User not found" });
+    if (!user) return res.status(400).send({ msg: "Usuario no encontrado" });
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).send({ msg: "Invalid password" });
+    if (!isMatch) return res.status(400).send({ msg: "Contraseña inválida" });
     jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
         if (err) {
-          console.error(err);
           return res.status(400).send({ msg: err.message });
         }
         res.cookie("token", token, {
@@ -99,11 +95,10 @@ const login = async (req, res) => {
         delete safeUser.password;
         if (!safeUser.profileImage)
           safeUser.profileImage = "/images/default-avatar.png";
-        res.status(200).send({ msg: "Login successful", user: safeUser });
+        res.status(200).send({ msg: "Inicio de sesión exitoso", user: safeUser });
       }
     );
   } catch (error) {
-    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -111,10 +106,9 @@ const login = async (req, res) => {
 const me = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
-    if (!user) return res.status(404).send({ msg: "User not found" });
+    if (!user) return res.status(404).send({ msg: "Usuario no encontrado" });
     res.status(200).send(user);
   } catch (error) {
-    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -122,9 +116,8 @@ const me = async (req, res) => {
 const logout = async (req, res) => {
   try {
     res.clearCookie("token");
-    res.status(200).send({ msg: "Logged out successfully" });
+    res.status(200).send({ msg: "Cierre de sesión exitoso" });
   } catch (error) {
-    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -168,7 +161,6 @@ const googleLogin = async (req, res) => {
       { expiresIn: "1d" },
       (err, token) => {
         if (err) {
-          console.error(err);
           return res.status(400).send({ msg: err.message });
         }
         res.cookie("token", token, {
@@ -185,7 +177,6 @@ const googleLogin = async (req, res) => {
       }
     );
   } catch (error) {
-    console.error(error);
     return res
       .status(400)
       .send({ msg: error.message || "Error al verificar token de Google" });
@@ -217,7 +208,6 @@ const generateForgotPasswordToken = async (req, res) => {
       .status(200)
       .send({ msg: "Se ha enviado un correo para restablecer la contraseña" });
   } catch (error) {
-    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -232,7 +222,6 @@ const generateForgotPasswordToken = async (req, res) => {
 const verifyForgotPasswordToken = async (req, res) => {
   try {
     const { token } = req.body;
-    console.log(req.query);
     const temporalToken = await TemporalToken.findOne({ token });
     if (!temporalToken)
       return res.status(404).send({ msg: "No se encontro el token" });
@@ -249,7 +238,6 @@ const verifyForgotPasswordToken = async (req, res) => {
     const user = await User.findById(temporalToken.userId).select('email');
     res.status(200).send({ token, email: user?.email });
   } catch (error) {
-    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };

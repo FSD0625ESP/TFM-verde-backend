@@ -1,9 +1,14 @@
 const express = require("express");
 const app = express();
+const http = require("http");
+const server = http.createServer(app);
+const { Server } = require("socket.io");
+const { setupSocketIO } = require("./services/socket");
 const userRoutes = require("./routes/users");
 const storeRoutes = require("./routes/stores");
 const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
+const chatRoutes = require("./routes/chats");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -16,6 +21,14 @@ app.use(
     credentials: true, // Habilita el envío de cookies
   })
 );
+
+// Configurar Socket.IO con CORS
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173",
+    credentials: true,
+  },
+});
 
 require("dotenv").config();
 app.use(express.json());
@@ -33,8 +46,17 @@ app.use("/users", userRoutes);
 app.use("/stores", storeRoutes);
 app.use("/products", productRoutes);
 app.use("/categories", categoryRoutes);
+app.use("/chats", chatRoutes);
+
+// ========== SOCKET.IO SETUP ==========
+setupSocketIO(io);
+
+// Exportar io para usar en otros módulos si es necesario
+app.set('io', io);
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  console.log(`🌐 HTTP Server: http://localhost:${port}`);
+  console.log(`🔌 Socket.IO ready on: http://localhost:${port}`);
 });

@@ -47,8 +47,49 @@ const getReviewsByProductId = async (req, res) => {
   }
 };
 
+/* POST - /add/store/
+   Add a review to a STORE
+*/
+const addStoreReview = async (req, res) => {
+  try {
+    const { userId, storeId, rating, comment } = req.body;
+    const newReview = new Review({
+      userId: new mongoose.Types.ObjectId(userId),
+      storeId: new mongoose.Types.ObjectId(storeId),
+      rating,
+      comment,
+    });
+    await newReview.save();
+    return res.status(200).json(newReview);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
+/* POST - /add/product/
+   Add a review to a PRODUCT
+*/
+const addProductReview = async (req, res) => {
+  console.log("backend - addProductReview", req.body);
+  try {
+    const { userId, productId, rating, comment } = req.body;
+    const newReview = new Review({
+      userId: new mongoose.Types.ObjectId(userId),
+      productId: new mongoose.Types.ObjectId(productId),
+      rating,
+      comment,
+    });
+    await newReview.save();
+    return res.status(200).json(newReview);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 module.exports = {
   getAllReviews,
   getReviewsByStoreId,
   getReviewsByProductId,
+  addStoreReview,
+  addProductReview,
 };

@@ -15,6 +15,23 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+/* GET - /products/store/:id
+   Get all products by store id
+*/
+const getAllProductsByStoreId = async (req, res) => {
+  try {
+    const products = await product
+      .find({ storeId: req.params.id })
+      .populate("storeId", ["name", "slug"]);
+    return res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
+/* GET - /products/featured
+   Get all featured products
+*/
 const getAllFeaturedProducts = async (req, res) => {
   try {
     const products = await product
@@ -26,6 +43,9 @@ const getAllFeaturedProducts = async (req, res) => {
   }
 };
 
+/* GET - /products/offer
+   Get all offer products
+*/
 const getAllOfferProducts = async (req, res) => {
   try {
     const products = await product
@@ -37,6 +57,9 @@ const getAllOfferProducts = async (req, res) => {
   }
 };
 
+/* GET - /products/product/:id
+   Get product by id
+*/
 const getProductById = async (req, res) => {
   try {
     const productById = await product
@@ -53,6 +76,7 @@ const searchProductsFunction = async (
   page = 1,
   text = "",
   categories = [],
+  stores = [],
   offer = undefined,
   min = 0,
   max = 1000
@@ -71,6 +95,7 @@ const searchProductsFunction = async (
     text,
     categories:
       typeof categories === "string" ? categories.split(",") : categories,
+    stores: typeof stores === "string" ? stores.split(",") : stores,
     offer,
     minNum,
     maxNum,
@@ -123,6 +148,49 @@ const searchProductsFunction = async (
     }
   }
 
+  // stores — accept array or comma-separated string
+  if (stores) {
+    const strs = Array.isArray(stores)
+      ? stores
+      : typeof stores === "string"
+      ? stores.split(",")
+      : [];
+
+    console.log("[Backend] Processing stores:", strs);
+
+    // convert to ObjectId instances if possible
+    const storeObjectIds = strs
+      .filter((s) => s !== undefined && s !== null && String(s).trim() !== "")
+      .map((s) => {
+        try {
+          const cleanId = String(s).trim();
+          return new mongoose.Types.ObjectId(cleanId);
+        } catch (err) {
+          console.log(
+            "[Backend] Error converting store to ObjectId:",
+            s,
+            err.message
+          );
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    console.log("[Backend] Converted store ObjectIds:", storeObjectIds);
+
+    if (storeObjectIds.length > 0) {
+      // Use $in for products that match ANY of the selected stores
+      query.storeId = { $in: storeObjectIds };
+      console.log("[Backend] Added selected stores filter to query");
+    } else {
+      //si no hay tiendas seleccionadas
+      //mostrar productos de todas las tiendas
+      console.log(
+        "[Backend] No stores selected, showing products from all stores"
+      );
+    }
+  }
+
   // offer - solo aplicar el filtro si offer es true
   if (offer === "true" || offer === true) {
     query.oferta = true;
@@ -153,11 +221,12 @@ const searchProducts = async (req, res) => {
   console.debug("[Backend] Raw query params:", req.query);
 
   try {
-    const { page, text, categories, offer, min, max } = req.query;
+    const { page, text, categories, stores, offer, min, max } = req.query;
     const products = await searchProductsFunction(
       page,
       text,
       categories,
+      stores,
       offer,
       min,
       max
@@ -171,6 +240,7 @@ const searchProducts = async (req, res) => {
 
 module.exports = {
   getAllProducts,
+  getAllProductsByStoreId,
   getAllFeaturedProducts,
   getAllOfferProducts,
   getProductById,

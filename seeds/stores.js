@@ -189,6 +189,14 @@ const createSeeds = async () => {
           description: `Hermoso ${productTypes[j].toLowerCase()} artesanal de ${
             storeNames[i]
           }`,
+          longDescription: `Este ${productTypes[
+            j
+          ].toLowerCase()} es una pieza única hecha a mano en nuestra tienda ${
+            storeNames[i]
+          }. Perfecto para quienes aprecian la calidad y el diseño exclusivo. 
+          Ideal para cualquier ocasión, este ${productTypes[
+            j
+          ].toLowerCase()} combina estilo y artesanía en cada detalle.`,
           price: Math.floor(Math.random() * 150) + 20,
           images: [
             `https://picsum.photos/400/400?random=${i}${j}1`,

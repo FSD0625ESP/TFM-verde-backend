@@ -38,6 +38,21 @@ const getStoreById = async (req, res) => {
   }
 };
 
+/* GET - /stores/store/seller/:id
+   Get a store by seller ID
+*/
+const getStoreBySellerId = async (req, res) => {
+  try {
+    const store = await Store.findOne({ ownerId: req.params.id });
+    if (!store) {
+      return res.status(404).json({ msg: "Tienda no encontrada" });
+    }
+    return res.status(200).json(store);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 /* POST - /stores/register
    Register a new store
 */
@@ -62,5 +77,6 @@ const registerStore = async (req, res) => {
 module.exports = {
   getAllStores,
   getStoreById,
+  getStoreBySellerId,
   registerStore,
 };

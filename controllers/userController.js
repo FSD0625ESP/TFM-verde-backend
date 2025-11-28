@@ -3,7 +3,6 @@ const bcrypt = require("bcrypt");
 const User = require("../models/user");
 const TemporalToken = require("../models/temporalToken");
 const { OAuth2Client } = require("google-auth-library");
-
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Controlador para el registro de usuarios
@@ -212,13 +211,6 @@ const generateForgotPasswordToken = async (req, res) => {
   }
 };
 
-// const temporalTokenSchema = new mongoose.Schema({
-//     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-//     token: { type: String, required: true },
-//     expiredAt: { type: Date, default: Date.now(), expires: 3600000 } // 1 hour
-// });
-
-
 const verifyForgotPasswordToken = async (req, res) => {
   try {
     const { token } = req.body;
@@ -242,12 +234,57 @@ const verifyForgotPasswordToken = async (req, res) => {
   }
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    const temporalToken = await TemporalToken.findOne({ token });
+    if (!temporalToken)
+      return res.status(404).send({ msg: "No se encontro el token" });
+    const user = await User.findById(temporalToken.userId);
+    if (!user)
+      return res.status(404).send({ msg: "No se encontro el usuario" });
+    // Validar la nueva contraseña
+    if (newPassword.length < 6) {
+      return res.status(400).send({ msg: "La contraseña debe tener al menos 6 caracteres" });
+    }
+    if (!/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{6,}$/.test(newPassword)) {
+      return res.status(400).send({
+        msg: "La contraseña debe contener al menos una mayúscula, una minúscula y un número",
+      });
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+    await TemporalToken.deleteOne({ token });
+
+    res.status(200).send({ msg: "Contraseña cambiada exitosamente" });
+  } catch (error) {
+    return res.status(400).send({ msg: error.message });
+  }
+};
+
+const contactForm = async (req, res) => {
+  try {
+    const { nombre, email, mensaje } = req.body;
+
+    const { sendContactEmail } = require("../services/emails");
+    await sendContactEmail({ nombre, email, mensaje });
+
+    console.log(`Nuevo mensaje de contacto de ${nombre} (${email}): ${mensaje}`);
+    res.status(200).send({ msg: "Mensaje enviado exitosamente" });
+  } catch (error) {
+    return res.status(400).send({ msg: error.message });
+  }
+};
+
 module.exports = {
   register,
   login,
   me,
   logout,
   googleLogin,
+  changePassword,
   generateForgotPasswordToken,
   verifyForgotPasswordToken,
+  contactForm,
 };

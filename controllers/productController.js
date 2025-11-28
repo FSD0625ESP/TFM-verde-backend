@@ -19,7 +19,8 @@ const getAllFeaturedProducts = async (req, res) => {
   try {
     const products = await product
       .find({ destacado: true })
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "logo"])
+      .populate("categories", ["name"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -91,8 +92,8 @@ const searchProductsFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     console.log("[Backend] Processing categories:", cats);
 
@@ -114,8 +115,6 @@ const searchProductsFunction = async (
       })
       .filter(Boolean);
 
-    console.log("[Backend] Converted category ObjectIds:", catObjectIds);
-
     if (catObjectIds.length > 0) {
       // Use $in for products that match ANY of the selected categories
       query.categories = { $in: catObjectIds };
@@ -134,23 +133,18 @@ const searchProductsFunction = async (
     query.price = { $gte: minNum, $lte: maxNum };
   }
 
-  console.log("[Backend] Final MongoDB query:", JSON.stringify(query, null, 2));
 
   const products = await product
     .find(query)
     .populate("storeId", ["name", "logo"])
+    .populate("categories", ["name"])
     .limit(limit)
     .skip((pageNum - 1) * limit);
 
-  console.log(
-    `[Backend] Found ${products.length} products for page ${pageNum}`
-  );
   return products;
 };
 
 const searchProducts = async (req, res) => {
-  console.debug("[Backend] Received search request");
-  console.debug("[Backend] Raw query params:", req.query);
 
   try {
     const { page, text, categories, offer, min, max } = req.query;
@@ -162,7 +156,6 @@ const searchProducts = async (req, res) => {
       min,
       max
     );
-    console.log(`[Backend] Found ${products.length} products`);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });

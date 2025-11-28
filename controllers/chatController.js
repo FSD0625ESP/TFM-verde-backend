@@ -158,7 +158,31 @@ exports.getOrCreateChat = async (req, res) => {
                 });
         }
 
-        res.json(chat);
+        // Formatear respuesta para que sea consistente con getUserChats
+        // El usuario actual (customer) ve al vendedor (owner de la tienda)
+        const lastMessage = chat.messages[chat.messages.length - 1];
+        const formattedChat = {
+            _id: chat._id,
+            store: {
+                _id: chat.storeId._id,
+                name: chat.storeId.name,
+                logo: chat.storeId.logo,
+            },
+            user: {
+                _id: chat.storeId.ownerId._id,
+                firstName: chat.storeId.ownerId.firstName,
+                lastName: chat.storeId.ownerId.lastName,
+                profileImage: chat.storeId.ownerId.profileImage,
+            },
+            lastMessage: lastMessage ? {
+                text: lastMessage.text,
+                timestamp: lastMessage.timestamp,
+                senderId: lastMessage.senderId,
+            } : null,
+            unreadCount: 0, // Nuevo chat, sin mensajes no leídos
+        };
+
+        res.json(formattedChat);
     } catch (error) {
         res.status(500).json({ msg: 'Error al crear el chat' });
     }

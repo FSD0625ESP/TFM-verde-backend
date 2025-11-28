@@ -4,6 +4,16 @@ const { getAllStores, registerStore, searchStores } = require("../controllers/st
 
 router.get("/all", getAllStores);
 router.get("/search", searchStores);
+const {
+  getAllStores,
+  getStoreById,
+  getStoreBySellerId,
+  registerStore,
+} = require("../controllers/storeController");
+
+router.get("/all", getAllStores);
+router.get("/store/:id", getStoreById);
+router.get("/store/seller/:id", getStoreBySellerId);
 router.post("/register", registerStore);
 
 exports = module.exports = router;

@@ -8,7 +8,9 @@ const userRoutes = require("./routes/users");
 const storeRoutes = require("./routes/stores");
 const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
+const reviewRoutes = require("./routes/reviews");
 const chatRoutes = require("./routes/chats");
+const uploadRoutes = require("./routes/uploads");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -46,13 +48,15 @@ app.use("/users", userRoutes);
 app.use("/stores", storeRoutes);
 app.use("/products", productRoutes);
 app.use("/categories", categoryRoutes);
+app.use("/reviews", reviewRoutes);
 app.use("/chats", chatRoutes);
+app.use("/uploads", uploadRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);
 
 // Exportar io para usar en otros módulos si es necesario
-app.set('io', io);
+app.set("io", io);
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => {

@@ -8,6 +8,7 @@ const storeSchema = new mongoose.Schema(
       required: true,
     },
     name: { type: String, required: true },
+    slug: { type: String, required: true },
     description: { type: String, required: true },
     logo: { type: String },
     image: { type: String },

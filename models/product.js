@@ -13,7 +13,7 @@ const productSchema = new mongoose.Schema(
     longDescription: { type: String, required: true },
     price: { type: Number, required: false },
     images: { type: [String], required: true },
-    status: { type: String, enum: ["onSale", "exhibition"], default: "onSale" },
+    status: { type: String, enum: ["onSale", "exhibition", "disabled"], default: "onSale" },
     nuevo: { type: Boolean, default: false },
     oferta: { type: Boolean, default: false },
     destacado: { type: Boolean, default: false },

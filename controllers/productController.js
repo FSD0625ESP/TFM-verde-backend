@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const product = require("../models/product");
+const store = require("../models/store");
+const generateSlug = require("../utils/generateSlug");
 
 /* GET - /products/all
    Get all products
@@ -71,14 +73,12 @@ const getProductById = async (req, res) => {
     res.status(500).json({ msg: error.message });
   }
 };
-
-// search products with filters and pagination
 const searchProductsFunction = async (
   page = 1,
   text = "",
   categories = [],
-  stores = [],
   offer = undefined,
+  stores = [],
   min = 0,
   max = 1000
 ) => {
@@ -89,18 +89,6 @@ const searchProductsFunction = async (
   const pageNum = Number(page) || 1;
   const minNum = Number(min) || 0;
   const maxNum = Number(max) || 500;
-
-  console.log("\n[Backend] Building MongoDB query");
-  console.log("[Backend] Normalized params:", {
-    pageNum,
-    text,
-    categories:
-      typeof categories === "string" ? categories.split(",") : categories,
-    stores: typeof stores === "string" ? stores.split(",") : stores,
-    offer,
-    minNum,
-    maxNum,
-  });
 
   if (text) {
     // title or description contains text (case-insensitive)
@@ -147,7 +135,6 @@ const searchProductsFunction = async (
     }
   }
 
-  // stores — accept array or comma-separated string
   if (stores) {
     const strs = Array.isArray(stores)
       ? stores
@@ -190,6 +177,7 @@ const searchProductsFunction = async (
     }
   }
 
+
   // offer - solo aplicar el filtro si offer es true
   if (offer === "true" || offer === true) {
     query.oferta = true;
@@ -204,7 +192,7 @@ const searchProductsFunction = async (
 
   const products = await product
     .find(query)
-    .populate("storeId", ["name", "slug", "logo"])
+    .populate("storeId", ["name", "logo", "slug"])
     .populate("categories", ["name"])
     .limit(limit)
     .skip((pageNum - 1) * limit);
@@ -231,6 +219,25 @@ const searchProducts = async (req, res) => {
   }
 };
 
+
+const createProduct = async (req, res) => {
+  try {
+    const storeData = await store.findOne({ ownerId: req.user.id });
+    let productData = {
+      storeId: new mongoose.Types.ObjectId(storeData._id),
+      slug: generateSlug(req.body.title),
+      ...req.body,
+    }
+    const newProduct = new product(productData);
+    console.log("newProduct", newProduct);
+    const savedProduct = await newProduct.save();
+    res.status(201).json({ savedProduct, productId: savedProduct._id });
+  } catch (error) {
+    console.error("Error creating product:", error);
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 module.exports = {
   getAllProducts,
   getAllProductsByStoreId,
@@ -239,4 +246,5 @@ module.exports = {
   getProductById,
   searchProductsFunction,
   searchProducts,
+  createProduct,
 };

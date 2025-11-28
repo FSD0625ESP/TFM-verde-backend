@@ -1,7 +1,6 @@
-// utils/generateSlug.js
-import slugify from "slugify";
+const slugify = require("slugify");
 
-export const generateSlug = (text) => {
+const generateSlug = (text) => {
   if (!text) return "";
 
   return slugify(text, {
@@ -11,3 +10,5 @@ export const generateSlug = (text) => {
     trim: true,
   });
 };
+
+module.exports = generateSlug;

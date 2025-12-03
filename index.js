@@ -12,7 +12,7 @@ const chatRoutes = require("./routes/chats");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-
+const cartRoutes = require("./routes/cart");
 app.use(cookieParser());
 
 app.use(
@@ -47,12 +47,13 @@ app.use("/stores", storeRoutes);
 app.use("/products", productRoutes);
 app.use("/categories", categoryRoutes);
 app.use("/chats", chatRoutes);
+app.use("/cart", cartRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);
 
 // Exportar io para usar en otros módulos si es necesario
-app.set('io', io);
+app.set("io", io);
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => {

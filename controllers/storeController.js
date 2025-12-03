@@ -90,7 +90,6 @@ const searchStoresFunction = async (
   // normalize numeric params
   const pageNum = Number(page) || 1;
 
-
   if (text) {
     // name or description contains text (case-insensitive)
     query.$or = [
@@ -108,7 +107,6 @@ const searchStoresFunction = async (
       : typeof categories === "string"
         ? categories.split(",")
         : [];
-
 
     // convert to ObjectId instances if possible
     const catObjectIds = cats
@@ -133,12 +131,18 @@ const searchStoresFunction = async (
       query.categories = { $in: catObjectIds };
     }
   }
-  const stores = await Store.find(query)
-    .populate("categories", "name")
-    .populate("ownerId", "firstName lastName email profileImage")
-    .limit(limit)
-    .skip((pageNum - 1) * limit);
-  return stores;
+
+  // Ejecutar ambas queries en paralelo
+  const [stores, totalCount] = await Promise.all([
+    Store.find(query)
+      .populate("categories", "name")
+      .populate("ownerId", "firstName lastName email profileImage")
+      .limit(limit)
+      .skip((pageNum - 1) * limit),
+    Store.countDocuments(query)
+  ]);
+
+  return { stores, total: totalCount };
 };
 
 const searchStores = async (req, res) => {
@@ -147,15 +151,16 @@ const searchStores = async (req, res) => {
 
   try {
     const { page, text, categories, minRating, maxRating } = req.query;
-    const stores = await searchStoresFunction(
+    const result = await searchStoresFunction(
       page,
       text,
       categories,
       minRating,
       maxRating
     );
-    console.log(`[Backend] Found ${stores.length} stores`);
-    return res.status(200).json(stores);
+
+    console.log(`[Backend] Found ${result.stores.length} stores, total: ${result.total}`);
+    return res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }

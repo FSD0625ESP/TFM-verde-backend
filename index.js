@@ -5,6 +5,7 @@ const server = http.createServer(app);
 const { Server } = require("socket.io");
 const { setupSocketIO } = require("./services/socket");
 const userRoutes = require("./routes/users");
+const addressRoutes = require("./routes/addresses");
 const storeRoutes = require("./routes/stores");
 const productRoutes = require("./routes/products");
 const categoryRoutes = require("./routes/categories");
@@ -19,7 +20,7 @@ app.use(cookieParser());
 
 app.use(
   cors({
-    origin: "http://localhost:5173", // Cambia esto a la URL de tu frontend
+    origin: ["http://localhost:5173", "http://localhost:5174"], // Cambia esto a la URL de tu frontend
     credentials: true, // Habilita el envío de cookies
   })
 );
@@ -45,6 +46,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/users", userRoutes);
+app.use("/addresses", addressRoutes);
 app.use("/stores", storeRoutes);
 app.use("/products", productRoutes);
 app.use("/categories", categoryRoutes);

@@ -263,6 +263,36 @@ const changePassword = async (req, res) => {
   }
 };
 
+const updateUserProfile = async (req, res) => {
+  try {
+    const { firstName, lastName } = req.body;
+    const userId = req.user.id;
+
+    // Validar que al menos uno de los campos sea proporcionado
+    if (!firstName && !lastName) {
+      return res.status(400).send({ msg: "Proporciona al menos un campo para actualizar" });
+    }
+
+    const updateData = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).send({ msg: "Usuario no encontrado" });
+    }
+
+    res.status(200).send({ msg: "Perfil actualizado exitosamente", user: updatedUser });
+  } catch (error) {
+    return res.status(400).send({ msg: error.message });
+  }
+};
+
 const contactForm = async (req, res) => {
   try {
     const { nombre, email, mensaje } = req.body;
@@ -286,5 +316,6 @@ module.exports = {
   changePassword,
   generateForgotPasswordToken,
   verifyForgotPasswordToken,
+  updateUserProfile,
   contactForm,
 };

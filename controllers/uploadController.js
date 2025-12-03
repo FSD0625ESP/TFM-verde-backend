@@ -1,6 +1,7 @@
 const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
 const Product = require("../models/product");
+const User = require("../models/user");
 require("dotenv").config();
 
 // Multer en memoria (necesario para upload_stream)
@@ -49,6 +50,63 @@ exports.uploadProductImage = async (req, res) => {
     return res.status(200).json({
       url: result.secure_url,
       product: updatedProduct,
+    });
+  } catch (err) {
+    if (!res.headersSent) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+};
+
+exports.uploadProfileImage = async (req, res) => {
+  try {
+    const file = req.file;
+    const userId = req.user.id;
+
+    if (!file) {
+      return res.status(400).json({ error: "No se ha recibido ningún archivo" });
+    }
+
+    // Validar que sea una imagen
+    if (!file.mimetype.startsWith("image/")) {
+      return res.status(400).json({ error: "El archivo debe ser una imagen" });
+    }
+
+    const uploadToCloudinary = () =>
+      new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "profile-images",
+            transformation: [
+              { width: 500, height: 500, crop: "fill", gravity: "face" },
+            ],
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        );
+
+        stream.end(file.buffer);
+      });
+
+    const result = await uploadToCloudinary();
+
+    // Actualizar el usuario con la nueva imagen
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { profileImage: result.secure_url },
+      { new: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    return res.status(200).json({
+      msg: "Imagen de perfil actualizada correctamente",
+      url: result.secure_url,
+      user: updatedUser,
     });
   } catch (err) {
     if (!res.headersSent) {

@@ -186,34 +186,38 @@ const searchProductsFunction = async (
 
   // price between
   if (!Number.isNaN(minNum) && !Number.isNaN(maxNum)) {
+    console.log("[Backend] Added price filter to query", minNum, maxNum);
     query.price = { $gte: minNum, $lte: maxNum };
   }
 
+  // Ejecutar ambas queries en paralelo
+  const [products, totalCount] = await Promise.all([
+    product
+      .find(query)
+      .populate("storeId", ["name", "logo", "slug"])
+      .populate("categories", ["name"])
+      .limit(limit)
+      .skip((pageNum - 1) * limit),
+    product.countDocuments(query)
+  ]);
 
-  const products = await product
-    .find(query)
-    .populate("storeId", ["name", "logo", "slug"])
-    .populate("categories", ["name"])
-    .limit(limit)
-    .skip((pageNum - 1) * limit);
-
-  return products;
+  console.log("[Backend] Found products:", query);
+  return { products, total: totalCount };
 };
 
 const searchProducts = async (req, res) => {
-
   try {
     const { page, text, categories, stores, offer, min, max } = req.query;
-    const products = await searchProductsFunction(
+    const result = await searchProductsFunction(
       page,
       text,
       categories,
-      stores,
       offer,
+      stores,
       min,
       max
     );
-    return res.status(200).json(products);
+    return res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -238,6 +242,66 @@ const createProduct = async (req, res) => {
   }
 };
 
+/* GET - /products/related/:id
+   Get related products by category (multiple categories)
+*/
+const getRelatedProducts = async (req, res) => {
+  try {
+    const { id: productId } = req.params;
+    const { categories = "", limit = 8 } = req.query;
+
+    // Obtain the current product to verify it exists
+    const currentProduct = await product.findById(productId);
+    if (!currentProduct) {
+      return res.status(404).json({ msg: "Producto no encontrado" });
+    }
+
+    // Parse categories - accept array or comma-separated string
+    const categoryIds = Array.isArray(categories)
+      ? categories
+      : typeof categories === "string"
+        ? categories.split(",")
+        : [];
+
+    // Convert to ObjectId instances
+    const categoryObjectIds = categoryIds
+      .filter((c) => c !== undefined && c !== null && String(c).trim() !== "")
+      .map((c) => {
+        try {
+          const cleanId = String(c).trim();
+          return new mongoose.Types.ObjectId(cleanId);
+        } catch (err) {
+          console.log(
+            "[Backend] Error converting category to ObjectId:",
+            c,
+            err.message
+          );
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    if (categoryObjectIds.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // Get related products that share ANY of the categories, excluding the current product
+    const relatedProducts = await product
+      .find({
+        _id: { $ne: productId },
+        categories: { $in: categoryObjectIds },
+        deletedAt: { $exists: false },
+      })
+      .populate("storeId", ["name", "slug", "logo"])
+      .populate("categories", ["name"])
+      .limit(Number(limit) || 8);
+
+    return res.status(200).json(relatedProducts);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 module.exports = {
   getAllProducts,
   getAllProductsByStoreId,
@@ -247,4 +311,5 @@ module.exports = {
   searchProductsFunction,
   searchProducts,
   createProduct,
+  getRelatedProducts,
 };

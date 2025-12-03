@@ -15,7 +15,7 @@ const uploadRoutes = require("./routes/uploads");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-
+const cartRoutes = require("./routes/cart");
 app.use(cookieParser());
 
 app.use(
@@ -52,6 +52,7 @@ app.use("/products", productRoutes);
 app.use("/categories", categoryRoutes);
 app.use("/reviews", reviewRoutes);
 app.use("/chats", chatRoutes);
+app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
 
 // ========== SOCKET.IO SETUP ==========

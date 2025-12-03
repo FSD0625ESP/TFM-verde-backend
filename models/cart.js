@@ -1,0 +1,48 @@
+// models/Cart.js
+const mongoose = require("mongoose");
+
+const cartSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true, // Un carrito por usuario
+    },
+
+    items: [
+      {
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product", // 🔹 Esto permite hacer populate
+          required: true,
+        },
+        quantity: {
+          type: Number,
+          required: true,
+          min: 1,
+        },
+      },
+    ],
+
+    total: {
+      type: Number,
+      default: 0,
+    },
+
+    deletedAt: { type: Date },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// 🔹 Opcional: Método para recalcular total
+cartSchema.methods.calculateTotal = function () {
+  this.total = this.items.reduce((acc, item) => {
+    const price = item.productId?.price || 0; // populate asegura que productId tenga price
+    return acc + price * item.quantity;
+  }, 0);
+};
+
+module.exports = mongoose.model("Cart", cartSchema);

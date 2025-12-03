@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, me, logout, googleLogin, generateForgotPasswordToken, verifyForgotPasswordToken } = require('../controllers/userController');
+const { register, login, me, logout, googleLogin, generateForgotPasswordToken, verifyForgotPasswordToken, changePassword, contactForm } = require('../controllers/userController');
 const { isAuthenticated } = require('../middlewares/authMiddleware');
 
 router.post('/register', register);
@@ -10,5 +10,7 @@ router.get('/me', isAuthenticated, me);
 router.patch('/logout', isAuthenticated, logout);
 router.post('/generate-forgot-password-token', generateForgotPasswordToken);
 router.post('/verify-forgot-password-token', verifyForgotPasswordToken);
+router.patch('/change-password', changePassword);
+router.post("/contact", contactForm)
 
 exports = module.exports = router;

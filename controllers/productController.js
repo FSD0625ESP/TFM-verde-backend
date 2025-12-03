@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const product = require("../models/product");
+const store = require("../models/store");
+const generateSlug = require("../utils/generateSlug");
 
 /* GET - /products/all
    Get all products
@@ -8,52 +10,75 @@ const getAllProducts = async (req, res) => {
   try {
     const products = await product
       .find({})
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
 
+/* GET - /products/store/:id
+   Get all products by store id
+*/
+const getAllProductsByStoreId = async (req, res) => {
+  try {
+    const products = await product
+      .find({ storeId: req.params.id })
+      .populate("storeId", ["name", "slug"]);
+    return res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
+/* GET - /products/featured
+   Get all featured products
+*/
 const getAllFeaturedProducts = async (req, res) => {
   try {
     const products = await product
       .find({ destacado: true })
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"])
+      .populate("categories", ["name"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
 
+/* GET - /products/offer
+   Get all offer products
+*/
 const getAllOfferProducts = async (req, res) => {
   try {
     const products = await product
       .find({ oferta: true })
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
 
+/* GET - /products/product/:id
+   Get product by id
+*/
 const getProductById = async (req, res) => {
   try {
     const productById = await product
       .findById(req.params.id)
-      .populate("storeId", ["name", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(productById);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
-
-// search products with filters and pagination
 const searchProductsFunction = async (
   page = 1,
   text = "",
   categories = [],
   offer = undefined,
+  stores = [],
   min = 0,
   max = 1000
 ) => {
@@ -64,17 +89,6 @@ const searchProductsFunction = async (
   const pageNum = Number(page) || 1;
   const minNum = Number(min) || 0;
   const maxNum = Number(max) || 500;
-
-  console.log("\n[Backend] Building MongoDB query");
-  console.log("[Backend] Normalized params:", {
-    pageNum,
-    text,
-    categories:
-      typeof categories === "string" ? categories.split(",") : categories,
-    offer,
-    minNum,
-    maxNum,
-  });
 
   if (text) {
     // title or description contains text (case-insensitive)
@@ -91,8 +105,8 @@ const searchProductsFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     console.log("[Backend] Processing categories:", cats);
 
@@ -114,14 +128,55 @@ const searchProductsFunction = async (
       })
       .filter(Boolean);
 
-    console.log("[Backend] Converted category ObjectIds:", catObjectIds);
-
     if (catObjectIds.length > 0) {
       // Use $in for products that match ANY of the selected categories
       query.categories = { $in: catObjectIds };
       console.log("[Backend] Added categories filter to query");
     }
   }
+
+  if (stores) {
+    const strs = Array.isArray(stores)
+      ? stores
+      : typeof stores === "string"
+        ? stores.split(",")
+        : [];
+
+    console.log("[Backend] Processing stores:", strs);
+
+    // convert to ObjectId instances if possible
+    const storeObjectIds = strs
+      .filter((s) => s !== undefined && s !== null && String(s).trim() !== "")
+      .map((s) => {
+        try {
+          const cleanId = String(s).trim();
+          return new mongoose.Types.ObjectId(cleanId);
+        } catch (err) {
+          console.log(
+            "[Backend] Error converting store to ObjectId:",
+            s,
+            err.message
+          );
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    console.log("[Backend] Converted store ObjectIds:", storeObjectIds);
+
+    if (storeObjectIds.length > 0) {
+      // Use $in for products that match ANY of the selected stores
+      query.storeId = { $in: storeObjectIds };
+      console.log("[Backend] Added selected stores filter to query");
+    } else {
+      //si no hay tiendas seleccionadas
+      //mostrar productos de todas las tiendas
+      console.log(
+        "[Backend] No stores selected, showing products from all stores"
+      );
+    }
+  }
+
 
   // offer - solo aplicar el filtro si offer es true
   if (offer === "true" || offer === true) {
@@ -134,46 +189,62 @@ const searchProductsFunction = async (
     query.price = { $gte: minNum, $lte: maxNum };
   }
 
-  console.log("[Backend] Final MongoDB query:", JSON.stringify(query, null, 2));
 
   const products = await product
     .find(query)
-    .populate("storeId", ["name", "logo"])
+    .populate("storeId", ["name", "logo", "slug"])
+    .populate("categories", ["name"])
     .limit(limit)
     .skip((pageNum - 1) * limit);
 
-  console.log(
-    `[Backend] Found ${products.length} products for page ${pageNum}`
-  );
   return products;
 };
 
 const searchProducts = async (req, res) => {
-  console.debug("[Backend] Received search request");
-  console.debug("[Backend] Raw query params:", req.query);
 
   try {
-    const { page, text, categories, offer, min, max } = req.query;
+    const { page, text, categories, stores, offer, min, max } = req.query;
     const products = await searchProductsFunction(
       page,
       text,
       categories,
+      stores,
       offer,
       min,
       max
     );
-    console.log(`[Backend] Found ${products.length} products`);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
 
+
+const createProduct = async (req, res) => {
+  try {
+    const storeData = await store.findOne({ ownerId: req.user.id });
+    let productData = {
+      storeId: new mongoose.Types.ObjectId(storeData._id),
+      slug: generateSlug(req.body.title),
+      ...req.body,
+    }
+    const newProduct = new product(productData);
+    console.log("newProduct", newProduct);
+    const savedProduct = await newProduct.save();
+    res.status(201).json({ savedProduct, productId: savedProduct._id });
+  } catch (error) {
+    console.error("Error creating product:", error);
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 module.exports = {
   getAllProducts,
+  getAllProductsByStoreId,
   getAllFeaturedProducts,
   getAllOfferProducts,
   getProductById,
   searchProductsFunction,
   searchProducts,
+  createProduct,
 };

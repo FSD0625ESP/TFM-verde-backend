@@ -106,7 +106,24 @@ async function sendPasswordResetEmail({ to, firstName, resetToken }) {
     });
 }
 
+const sendContactEmail = async ({ nombre, email, mensaje }) => {
+    const templateData = {
+        EMAIL_BODY_CONTENT: `
+            <h2>Nuevo mensaje de contacto</h2>
+            <p><strong>Nombre:</strong> ${nombre}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Mensaje:</strong> ${mensaje}</p>
+        `
+    };
+    return sendEmail({
+        to: process.env.CONTACT_EMAIL || process.env.EMAIL_USER,
+        subject: 'Nuevo mensaje de contacto - Meraki Marketplace',
+        templateData
+    });
+};
+
 module.exports = {
     sendEmail,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    sendContactEmail
 };

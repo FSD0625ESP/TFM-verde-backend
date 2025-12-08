@@ -265,17 +265,18 @@ const changePassword = async (req, res) => {
 
 const updateUserProfile = async (req, res) => {
   try {
-    const { firstName, lastName } = req.body;
+    const { firstName, lastName, phone } = req.body;
     const userId = req.user.id;
 
     // Validar que al menos uno de los campos sea proporcionado
-    if (!firstName && !lastName) {
+    if (!firstName && !lastName && !phone) {
       return res.status(400).send({ msg: "Proporciona al menos un campo para actualizar" });
     }
 
     const updateData = {};
     if (firstName) updateData.firstName = firstName;
     if (lastName) updateData.lastName = lastName;
+    if (phone !== undefined) updateData.phone = phone || null;
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,

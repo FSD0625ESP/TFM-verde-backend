@@ -14,7 +14,7 @@ exports.getCart = async (req, res) => {
 
     const cart = await Cart.findOne({ userId }).populate(
       "items.productId",
-      "title images price _id"
+      "title images price _id storeId"
     );
 
     if (!cart) {
@@ -71,7 +71,10 @@ exports.addToCart = async (req, res) => {
 
     await cart.save();
     //Populamos el carrito para fronted antes de enviarlo
-    cart = await cart.populate("items.productId", "title images price _id");
+    cart = await cart.populate(
+      "items.productId",
+      "title images price _id storeId"
+    );
     res.json(cart);
   } catch (err) {
     console.log("Error en addToCart:", err);
@@ -140,6 +143,13 @@ exports.removeItem = async (req, res) => {
   try {
     const { productId, quantity = 1 } = req.body;
 
+    console.log(
+      "🗑️ removeItem recibido - productId:",
+      productId,
+      "quantity:",
+      quantity
+    );
+
     const userId = req.user?.id;
 
     if (!userId)
@@ -151,18 +161,31 @@ exports.removeItem = async (req, res) => {
     if (!cart)
       return res.status(404).json({ message: "Carrito no encontrado" });
 
+    console.log("📦 Carrito encontrado, items antes:", cart.items.length);
+
     //Modificamos la cantidad del producto especificada o eliminamos el item si la cantidad es mayor o igual a la existente
     const itemIndex = cart.items.findIndex(
       (item) => item.productId.toString() === productId
     );
+
+    console.log("🔍 Item index:", itemIndex);
+
     if (itemIndex !== -1) {
       const item = cart.items[itemIndex];
-      if (item.quantity >= quantity) {
-        item.quantity -= quantity;
-      } else {
+      const newQuantity = item.quantity - quantity;
+
+      // Si la nueva cantidad es <= 0, eliminar el item completo
+      if (newQuantity <= 0) {
         cart.items.splice(itemIndex, 1);
+        console.log("🗑️ Item eliminado (cantidad sería <= 0)");
+      } else {
+        // Si aún queda cantidad, solo restar
+        item.quantity = newQuantity;
+        console.log("📉 Cantidad reducida a:", newQuantity);
       }
     }
+
+    console.log("📦 Items después de modificar:", cart.items.length);
 
     // Recalcular total
     let total = 0;
@@ -172,16 +195,24 @@ exports.removeItem = async (req, res) => {
     }
     cart.total = total;
 
+    console.log("💾 Guardando carrito...");
     await cart.save();
 
-    // Populamos el carrito para frontend antes de enviarlo
-    cart = await cart.populate("items.productId", "title images price _id");
+    console.log("📤 Recargando carrito con populate...");
+    // Recargar y poplar el carrito para frontend antes de enviarlo
+    cart = await Cart.findOne({ userId }).populate(
+      "items.productId",
+      "title images price _id storeId"
+    );
+
+    console.log("✅ removeItem completado exitosamente");
     res.json(cart);
   } catch (err) {
-    console.log("Error en removeItem:", err);
+    console.log("❌ Error en removeItem:", err.message);
+    console.log("Stack:", err.stack);
     res.status(500).json({
       message: "Error al eliminar del carrito",
-      error: err,
+      error: err.message,
     });
   }
 };

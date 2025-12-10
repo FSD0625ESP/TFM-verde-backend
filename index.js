@@ -4,6 +4,34 @@ const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
 const { setupSocketIO } = require("./services/socket");
+
+// Cargar variables de entorno primero
+require("dotenv").config();
+
+// Middlewares globales
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+
+app.use(cookieParser());
+app.use(express.json());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    credentials: true,
+  })
+);
+
+// Configurar Socket.IO con CORS
+const io = new Server(server, {
+  cors: {
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    credentials: true,
+    methods: ["GET", "POST"],
+  },
+  transports: ["websocket", "polling"],
+});
+
+// Importar rutas
 const userRoutes = require("./routes/users");
 const addressRoutes = require("./routes/addresses");
 const storeRoutes = require("./routes/stores");
@@ -12,29 +40,9 @@ const categoryRoutes = require("./routes/categories");
 const reviewRoutes = require("./routes/reviews");
 const chatRoutes = require("./routes/chats");
 const uploadRoutes = require("./routes/uploads");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const cookieParser = require("cookie-parser");
 const cartRoutes = require("./routes/cart");
-app.use(cookieParser());
-
-app.use(
-  cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"], // Cambia esto a la URL de tu frontend
-    credentials: true, // Habilita el envío de cookies
-  })
-);
-
-// Configurar Socket.IO con CORS
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:5173",
-    credentials: true,
-  },
-});
-
-require("dotenv").config();
-app.use(express.json());
+const orderRoutes = require("./routes/order");
+const mongoose = require("mongoose");
 
 mongoose
   .connect(process.env.MONGO_URI)
@@ -54,6 +62,7 @@ app.use("/reviews", reviewRoutes);
 app.use("/chats", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
+app.use("/orders", orderRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

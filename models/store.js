@@ -29,6 +29,12 @@ const storeSchema = new mongoose.Schema(
       facebook: { type: String },
       web: { type: String },
     },
+    appearance: {
+      showFeaturedSection: { type: Boolean, default: true },
+      showOfferSection: { type: Boolean, default: true },
+      showSlider: { type: Boolean, default: false },
+      sliderImages: { type: [String], default: [] },
+    },
     deletedAt: { type: Date },
   },
   {

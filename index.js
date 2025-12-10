@@ -17,6 +17,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const cartRoutes = require("./routes/cart");
 require("dotenv").config();
+
 app.use(cookieParser());
 
 app.use(

@@ -116,3 +116,31 @@ exports.uploadProfileImage = async (req, res) => {
 };
 
 exports.uploadMiddleware = upload.single("image");
+
+// Helper para subir archivos a Cloudinary (usado por otras rutas)
+exports.uploadImage = async (filePath, folder = "uploads") => {
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: "auto",
+    });
+
+    // Limpiar archivo temporal si existe
+    if (filePath && filePath.startsWith("/")) {
+      const fs = require("fs");
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {
+        // Ignorar error si no se puede eliminar
+      }
+    }
+
+    return {
+      secure_url: result.secure_url,
+      public_id: result.public_id,
+    };
+  } catch (error) {
+    console.error("Error uploading to Cloudinary:", error);
+    throw error;
+  }
+};

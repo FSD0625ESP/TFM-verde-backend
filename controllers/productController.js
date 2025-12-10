@@ -53,7 +53,8 @@ const getAllOfferProducts = async (req, res) => {
   try {
     const products = await product
       .find({ oferta: true })
-      .populate("storeId", ["name", "slug", "logo"]);
+      .populate("storeId", ["name", "slug", "logo"])
+      .populate("categories", ["name"]);
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });

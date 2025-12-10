@@ -157,7 +157,7 @@ exports.removeItem = async (req, res) => {
     );
     if (itemIndex !== -1) {
       const item = cart.items[itemIndex];
-      if (item.quantity >= quantity) {
+      if (item.quantity > quantity) {
         item.quantity -= quantity;
       } else {
         cart.items.splice(itemIndex, 1);

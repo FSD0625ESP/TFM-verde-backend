@@ -259,7 +259,7 @@ const uploadStoreImage = async (req, res) => {
     }
 
     // Use uploadImage from uploadController (uses cloudinary)
-    const result = await uploadImage(req.file.path, `stores/${storeId}/${type || 'image'}`);
+    const result = await uploadImage(req.file.buffer, `stores/${storeId}/${type || 'image'}`);
 
     // Guardar en el campo correcto según el tipo
     if (type === "logo") {
@@ -302,7 +302,7 @@ const uploadSliderImage = async (req, res) => {
     }
 
     // Use uploadImage from uploadController
-    const result = await uploadImage(req.file.path, `stores/${storeId}/slider`);
+    const result = await uploadImage(req.file.buffer, `stores/${storeId}/slider`);
 
     store.appearance.sliderImages.push(result.secure_url);
     await store.save();

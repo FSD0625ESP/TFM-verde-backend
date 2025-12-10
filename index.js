@@ -4,6 +4,26 @@ const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
 const { setupSocketIO } = require("./services/socket");
+
+// Cargar variables de entorno primero
+require("dotenv").config();
+
+// Middlewares globales
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+
+app.use(cookieParser());
+app.use(express.json());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    credentials: true,
+  })
+);
+
+
+
+// Importar rutas
 const userRoutes = require("./routes/users");
 const addressRoutes = require("./routes/addresses");
 const storeRoutes = require("./routes/stores");
@@ -12,10 +32,9 @@ const categoryRoutes = require("./routes/categories");
 const reviewRoutes = require("./routes/reviews");
 const chatRoutes = require("./routes/chats");
 const uploadRoutes = require("./routes/uploads");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const cookieParser = require("cookie-parser");
 const cartRoutes = require("./routes/cart");
+const orderRoutes = require("./routes/order");
+const mongoose = require("mongoose");
 require("dotenv").config();
 
 app.use(cookieParser());
@@ -56,6 +75,7 @@ app.use("/reviews", reviewRoutes);
 app.use("/chats", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
+app.use("/orders", orderRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

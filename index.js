@@ -21,15 +21,7 @@ app.use(
   })
 );
 
-// Configurar Socket.IO con CORS
-const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
-    credentials: true,
-    methods: ["GET", "POST"],
-  },
-  transports: ["websocket", "polling"],
-});
+
 
 // Importar rutas
 const userRoutes = require("./routes/users");
@@ -43,6 +35,26 @@ const uploadRoutes = require("./routes/uploads");
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
 const mongoose = require("mongoose");
+require("dotenv").config();
+app.use(cookieParser());
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL, // Cambia esto a la URL de tu frontend
+    credentials: true, // Habilita el envío de cookies
+  })
+);
+
+// Configurar Socket.IO con CORS
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+  },
+});
+
+require("dotenv").config();
+app.use(express.json());
 
 mongoose
   .connect(process.env.MONGO_URI)

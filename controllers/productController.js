@@ -24,7 +24,8 @@ const getAllProductsByStoreId = async (req, res) => {
   try {
     const products = await product
       .find({ storeId: req.params.id })
-      .populate("storeId", ["name", "slug"]);
+      .populate("storeId", ["name", "slug"])
+      .populate("categories", "name");
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -74,6 +75,54 @@ const getProductById = async (req, res) => {
     res.status(500).json({ msg: error.message });
   }
 };
+
+/* DELETE - /products/delete-product/:id/:userId
+   Delete product by id - only owner can delete
+*/
+const deleteProductById = async (req, res) => {
+  try {
+    const productById = await product
+      .findById(req.params.id)
+      .populate("storeId", ["ownerId"]);
+
+    if (!productById) {
+      return res.status(404).json({ msg: "Producto no encontrado" });
+    }
+    if (productById.storeId.ownerId.toString() !== req.params.userId) {
+      return res
+        .status(403)
+        .json({ msg: "No tienes permiso para eliminar este producto" });
+    }
+
+    await product.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ msg: "Producto eliminado" });
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
+/* PATCH - /products/update-product/:id
+    Update product by id
+*/
+const updateProductById = async (req, res) => {
+  try {
+    const updatedProduct = await product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true } // Devuelve el documento actualizado
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).json({ msg: `Producto no encontrado` });
+    }
+    return res
+      .status(200)
+      .json({ msg: `Producto actualizado`, product: updatedProduct });
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 const searchProductsFunction = async (
   page = 1,
   text = "",
@@ -106,8 +155,8 @@ const searchProductsFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-        ? categories.split(",")
-        : [];
+      ? categories.split(",")
+      : [];
 
     console.log("[Backend] Processing categories:", cats);
 
@@ -140,8 +189,8 @@ const searchProductsFunction = async (
     const strs = Array.isArray(stores)
       ? stores
       : typeof stores === "string"
-        ? stores.split(",")
-        : [];
+      ? stores.split(",")
+      : [];
 
     console.log("[Backend] Processing stores:", strs);
 
@@ -178,7 +227,6 @@ const searchProductsFunction = async (
     }
   }
 
-
   // offer - solo aplicar el filtro si offer es true
   if (offer === "true" || offer === true) {
     query.oferta = true;
@@ -199,7 +247,7 @@ const searchProductsFunction = async (
       .populate("categories", ["name"])
       .limit(limit)
       .skip((pageNum - 1) * limit),
-    product.countDocuments(query)
+    product.countDocuments(query),
   ]);
 
   console.log("[Backend] Found products:", query);
@@ -224,7 +272,6 @@ const searchProducts = async (req, res) => {
   }
 };
 
-
 const createProduct = async (req, res) => {
   try {
     const storeData = await store.findOne({ ownerId: req.user.id });
@@ -232,7 +279,7 @@ const createProduct = async (req, res) => {
       storeId: new mongoose.Types.ObjectId(storeData._id),
       slug: generateSlug(req.body.title),
       ...req.body,
-    }
+    };
     const newProduct = new product(productData);
     console.log("newProduct", newProduct);
     const savedProduct = await newProduct.save();
@@ -261,8 +308,8 @@ const getRelatedProducts = async (req, res) => {
     const categoryIds = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-        ? categories.split(",")
-        : [];
+      ? categories.split(",")
+      : [];
 
     // Convert to ObjectId instances
     const categoryObjectIds = categoryIds
@@ -309,6 +356,8 @@ module.exports = {
   getAllFeaturedProducts,
   getAllOfferProducts,
   getProductById,
+  deleteProductById,
+  updateProductById,
   searchProductsFunction,
   searchProducts,
   createProduct,

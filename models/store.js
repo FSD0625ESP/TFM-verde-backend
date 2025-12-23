@@ -32,6 +32,7 @@ const storeSchema = new mongoose.Schema(
     appearance: {
       showFeaturedSection: { type: Boolean, default: true },
       showOfferSection: { type: Boolean, default: true },
+      sectionsOrder: { type: [String], default: ["featured", "offers"] },
       showSlider: { type: Boolean, default: false },
       sliderImages: { type: [String], default: [] },
     },

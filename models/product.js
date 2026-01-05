@@ -27,6 +27,7 @@ const productSchema = new mongoose.Schema(
     oferta: { type: Boolean, default: false },
     destacado: { type: Boolean, default: false },
     stock: { type: Number, required: true },
+    views: { type: Number, default: 0 },
     categories: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "Category",

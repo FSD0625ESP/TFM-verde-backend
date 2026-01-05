@@ -195,41 +195,20 @@ exports.uploadProfileImage = async (req, res) => {
 exports.uploadMiddleware = upload.single("image");
 
 // Helper para subir archivos a Cloudinary (usado por otras rutas)
-// Soporta tanto buffer como ruta de archivo
-exports.uploadImage = async (fileSource, folder = "uploads") => {
+exports.uploadImage = async (filePath, folder = "uploads") => {
   try {
-    let result;
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: "auto",
+    });
 
-    // Si es un buffer, usar upload_stream
-    if (Buffer.isBuffer(fileSource)) {
-      result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: folder,
-            resource_type: "auto",
-          },
-          (error, result) => {
-            if (error) return reject(error);
-            resolve(result);
-          }
-        );
-        stream.end(fileSource);
-      });
-    } else {
-      // Si es una ruta, usar upload directo
-      result = await cloudinary.uploader.upload(fileSource, {
-        folder: folder,
-        resource_type: "auto",
-      });
-
-      // Limpiar archivo temporal si existe
-      if (fileSource && fileSource.startsWith("/")) {
-        const fs = require("fs");
-        try {
-          fs.unlinkSync(fileSource);
-        } catch (e) {
-          // Ignorar error si no se puede eliminar
-        }
+    // Limpiar archivo temporal si existe
+    if (filePath && filePath.startsWith("/")) {
+      const fs = require("fs");
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {
+        // Ignorar error si no se puede eliminar
       }
     }
 

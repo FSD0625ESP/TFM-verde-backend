@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
 const fs = require('fs').promises;
 const path = require('path');
+require('dotenv').config();
 
 // Configuración del transportador de email
 const emailConfig = {

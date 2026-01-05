@@ -34,6 +34,7 @@ const chatRoutes = require("./routes/chats");
 const uploadRoutes = require("./routes/uploads");
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
+const analyticsRoutes = require("./routes/analytics");
 const mongoose = require("mongoose");
 require("dotenv").config();
 
@@ -76,6 +77,7 @@ app.use("/chats", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
 app.use("/orders", orderRoutes);
+app.use("/analytics", analyticsRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

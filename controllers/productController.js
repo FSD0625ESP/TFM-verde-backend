@@ -146,7 +146,6 @@ const updateProductById = async (req, res) => {
       req.body,
       { new: true } // Devuelve el documento actualizado
     );
-
     if (!updatedProduct) {
       return res.status(404).json({ msg: `Producto no encontrado` });
     }
@@ -191,8 +190,8 @@ const searchProductsFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     console.log("[Backend] Processing categories:", cats);
 
@@ -225,8 +224,8 @@ const searchProductsFunction = async (
     const strs = Array.isArray(stores)
       ? stores
       : typeof stores === "string"
-      ? stores.split(",")
-      : [];
+        ? stores.split(",")
+        : [];
 
     console.log("[Backend] Processing stores:", strs);
 
@@ -387,8 +386,8 @@ const getRelatedProducts = async (req, res) => {
     const categoryIds = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     // Convert to ObjectId instances
     const categoryObjectIds = categoryIds

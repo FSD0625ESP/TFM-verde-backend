@@ -238,7 +238,13 @@ const getStoreAppearance = async (req, res) => {
 const updateStoreAppearance = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { showFeaturedSection, showOfferSection, showSlider } = req.body;
+    const {
+      showFeaturedSection,
+      showOfferSection,
+      sectionsOrder,
+      showSlider,
+      sliderImages,
+    } = req.body;
 
     const store = await Store.findById(storeId);
     if (!store) {
@@ -259,6 +265,44 @@ const updateStoreAppearance = async (req, res) => {
     }
     if (showSlider !== undefined) {
       store.appearance.showSlider = showSlider;
+    }
+
+    if (sectionsOrder !== undefined) {
+      if (!Array.isArray(sectionsOrder)) {
+        return res.status(400).json({ msg: "sectionsOrder debe ser un array" });
+      }
+      const normalized = sectionsOrder.map((v) => String(v).trim());
+      const allowed = new Set(["featured", "offers"]);
+      const isValidLength = normalized.length === 2;
+      const isValidValues = normalized.every((v) => allowed.has(v));
+      const isUnique = new Set(normalized).size === normalized.length;
+      if (!isValidLength || !isValidValues || !isUnique) {
+        return res
+          .status(400)
+          .json({
+            msg: "sectionsOrder debe ser ['featured','offers'] (en el orden que quieras)",
+          });
+      }
+      store.appearance.sectionsOrder = normalized;
+    }
+
+    if (sliderImages !== undefined) {
+      if (!Array.isArray(sliderImages)) {
+        return res.status(400).json({ msg: "sliderImages debe ser un array" });
+      }
+      if (sliderImages.length > 10) {
+        return res.status(400).json({ msg: "Máximo 10 imágenes en el slider" });
+      }
+      const allStrings = sliderImages.every(
+        (v) => typeof v === "string" && v.trim().length > 0
+      );
+      if (!allStrings) {
+        return res
+          .status(400)
+          .json({ msg: "sliderImages debe ser un array de URLs (string)" });
+      }
+
+      store.appearance.sliderImages = sliderImages;
     }
 
     await store.save();
@@ -296,7 +340,7 @@ const uploadStoreImage = async (req, res) => {
 
     // Use uploadImage from uploadController (uses cloudinary)
     const result = await uploadImage(
-      req.file.buffer,
+      req.file.path,
       `stores/${storeId}/${type || "image"}`
     );
 
@@ -341,10 +385,7 @@ const uploadSliderImage = async (req, res) => {
     }
 
     // Use uploadImage from uploadController
-    const result = await uploadImage(
-      req.file.buffer,
-      `stores/${storeId}/slider`
-    );
+    const result = await uploadImage(req.file.path, `stores/${storeId}/slider`);
 
     store.appearance.sliderImages.push(result.secure_url);
     await store.save();

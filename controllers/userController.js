@@ -92,8 +92,6 @@ const login = async (req, res) => {
         });
         const safeUser = user.toObject ? user.toObject() : user;
         delete safeUser.password;
-        if (!safeUser.profileImage)
-          safeUser.profileImage = "/images/default-avatar.png";
         res.status(200).send({ msg: "Inicio de sesión exitoso", user: safeUser });
       }
     );
@@ -207,6 +205,7 @@ const generateForgotPasswordToken = async (req, res) => {
       .status(200)
       .send({ msg: "Se ha enviado un correo para restablecer la contraseña" });
   } catch (error) {
+    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -306,6 +305,7 @@ const contactForm = async (req, res) => {
     return res.status(400).send({ msg: error.message });
   }
 };
+
 
 module.exports = {
   register,

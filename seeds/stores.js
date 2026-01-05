@@ -77,6 +77,17 @@ const createSeeds = async () => {
         description: "Artículos decorativos para el hogar",
       },
       { name: "Joyería", description: "Joyas y bisutería" },
+      {
+        name: "Juguetes",
+        description: "Juguetes y juegos para todas las edades",
+      },
+      { name: "Muebles", description: "Muebles y decoración para el hogar" },
+      { name: "Jardineria", description: "Jardineria" },
+      { name: "Cocina", description: "Cocina" },
+      {
+        name: "Cuidado Personal",
+        description: "Productos de belleza y cuidado personal",
+      },
     ]);
 
     // Crear tiendas
@@ -140,11 +151,13 @@ const createSeeds = async () => {
 
       const store = await Store.create({
         ownerId: sellers[i]._id,
+        active: true,
         name: storeNames[i],
         slug: generateSlug(storeNames[i]),
         description: `Una tienda única especializada en productos artesanales y de diseño - ${storeNames[i]}`,
+        longDescription: `Bienvenido a ${storeNames[i]}, tu destino para encontrar productos únicos y hechos a mano. Nuestra tienda se especializa en ofrecer una variedad de artículos que combinan calidad, creatividad y estilo. Desde ropa y accesorios hasta arte y decoración para el hogar, cada producto en nuestra tienda ha sido cuidadosamente seleccionado para satisfacer los gustos más exigentes. Explora nuestra colección y descubre piezas que reflejan tu personalidad y estilo de vida.`,
         logo: logoDataUri,
-        image: `https://picsum.photos/600/400?random=${i}`,
+        image: `https://picsum.photos/1600/900?random=${i}`,
         categories: chosenCategoryIds,
         billingInfo: {
           name: `${sellers[i].firstName} ${sellers[i].lastName}`,
@@ -155,8 +168,12 @@ const createSeeds = async () => {
             .replace(/\s+/g, "")}.com`,
         },
         socialLinks: {
-          instagram: `@${storeNames[i].toLowerCase().replace(/\s+/g, "")}`,
-          facebook: `/${storeNames[i].toLowerCase().replace(/\s+/g, "")}`,
+          instagram: `https://www.instagram.com/${storeNames[i]
+            .toLowerCase()
+            .replace(/\s+/g, "")}`,
+          facebook: `https://www.facebook.com/${storeNames[i]
+            .toLowerCase()
+            .replace(/\s+/g, "")}`,
           web: `https://${storeNames[i].toLowerCase().replace(/\s+/g, "")}.com`,
         },
       });
@@ -199,8 +216,10 @@ const createSeeds = async () => {
           ].toLowerCase()} combina estilo y artesanía en cada detalle.`,
           price: Math.floor(Math.random() * 150) + 20,
           images: [
-            `https://picsum.photos/400/400?random=${i}${j}1`,
-            `https://picsum.photos/400/400?random=${i}${j}2`,
+            {
+              url: `https://picsum.photos/1200/1200?random=${i}${j}0`,
+              public_id: `product_${i}_${j}_0`,
+            },
           ],
           status: Math.random() > 0.2 ? "onSale" : "exhibition",
           nuevo: Math.random() > 0.6,

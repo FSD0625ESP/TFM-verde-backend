@@ -4,6 +4,7 @@ const {
   getStoreById,
   getStoreBySellerId,
   registerStore,
+  updateStoreById,
   searchStores,
   getStoreAppearance,
   updateStoreAppearance,
@@ -25,6 +26,7 @@ router.get("/search", searchStores);
 router.get("/store/:id", getStoreById);
 router.get("/store/seller/:id", getStoreBySellerId);
 router.post("/register", registerStore);
+router.patch("/update/:storeId/:userId", isAuthenticated, updateStoreById);
 
 // ============================================
 // APARIENCIA DE TIENDA
@@ -37,10 +39,20 @@ router.get("/:storeId/appearance", getStoreAppearance);
 router.patch("/:storeId/appearance", isAuthenticated, updateStoreAppearance);
 
 // Subir imagen destacada de tienda
-router.post("/:storeId/image", isAuthenticated, upload.single("image"), uploadStoreImage);
+router.post(
+  "/:storeId/image",
+  isAuthenticated,
+  upload.single("image"),
+  uploadStoreImage
+);
 
 // Subir imagen al slider
-router.post("/:storeId/slider", isAuthenticated, upload.single("image"), uploadSliderImage);
+router.post(
+  "/:storeId/slider",
+  isAuthenticated,
+  upload.single("image"),
+  uploadSliderImage
+);
 
 // Eliminar imagen del slider
 router.delete("/:storeId/slider/:imageUrl", isAuthenticated, deleteSliderImage);
@@ -56,7 +68,11 @@ router.get("/:storeId/featured-products", getFeaturedProducts);
 router.get("/:storeId/offer-products", getOfferProducts);
 
 // Marcar/desmarcar producto como destacado
-router.patch("/products/:productId/featured", isAuthenticated, toggleProductFeatured);
+router.patch(
+  "/products/:productId/featured",
+  isAuthenticated,
+  toggleProductFeatured
+);
 
 // Actualizar estado de oferta de un producto
 router.patch("/products/:productId/offer", isAuthenticated, toggleProductOffer);

@@ -12,8 +12,17 @@ const productSchema = new mongoose.Schema(
     description: { type: String, required: true },
     longDescription: { type: String, required: true },
     price: { type: Number, required: false },
-    images: { type: [String], required: true },
-    status: { type: String, enum: ["onSale", "exhibition", "disabled"], default: "onSale" },
+    images: [
+      {
+        url: { type: String, required: true },
+        public_id: { type: String, required: true },
+      },
+    ],
+    status: {
+      type: String,
+      enum: ["onSale", "exhibition", "disabled"],
+      default: "onSale",
+    },
     nuevo: { type: Boolean, default: false },
     oferta: { type: Boolean, default: false },
     destacado: { type: Boolean, default: false },

@@ -3,6 +3,26 @@ const product = require("../models/product");
 const store = require("../models/store");
 const generateSlug = require("../utils/generateSlug");
 
+/* Función para verificar si el usuario puede ver el producto
+// Si el usuario no está autenticado o no es el propietario, 
+// solo verá productos de tiendas activas.
+// Si el usuario es el propietario de la tienda, 
+// podrá ver todos los productos de su tienda. 
+*/
+const canUserSeeProduct = (product, user) => {
+  if (!product.storeId) return false;
+
+  // tienda activa → visible para todos
+  if (product.storeId.active) return true;
+
+  // tienda inactiva → solo visible para el owner
+  if (user && String(product.storeId.ownerId) === String(user.id)) {
+    return true;
+  }
+
+  return false;
+};
+
 /* GET - /products/all
    Get all products
 */
@@ -39,9 +59,16 @@ const getAllFeaturedProducts = async (req, res) => {
   try {
     const products = await product
       .find({ destacado: true })
-      .populate("storeId", ["name", "slug", "logo"])
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
       .populate("categories", ["name"]);
-    return res.status(200).json(products);
+
+    const filteredProducts = products.filter((p) =>
+      canUserSeeProduct(p, req.user)
+    );
+    return res.status(200).json(filteredProducts);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -54,9 +81,16 @@ const getAllOfferProducts = async (req, res) => {
   try {
     const products = await product
       .find({ oferta: true })
-      .populate("storeId", ["name", "slug", "logo"])
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
       .populate("categories", ["name"]);
-    return res.status(200).json(products);
+
+    const filteredProducts = products.filter((p) =>
+      canUserSeeProduct(p, req.user)
+    );
+    return res.status(200).json(filteredProducts);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -69,6 +103,7 @@ const getProductById = async (req, res) => {
   try {
     const productById = await product
       .findById(req.params.id)
+      .populate("categories", ["name"])
       .populate("storeId", ["name", "slug", "logo"]);
     return res.status(200).json(productById);
   } catch (error) {
@@ -130,7 +165,8 @@ const searchProductsFunction = async (
   offer = undefined,
   stores = [],
   min = 0,
-  max = 1000
+  max = 1000,
+  user = null
 ) => {
   const limit = 20;
   const query = { deletedAt: { $exists: false } };
@@ -240,10 +276,15 @@ const searchProductsFunction = async (
   }
 
   // Ejecutar ambas queries en paralelo
+  /*
   const [products, totalCount] = await Promise.all([
     product
       .find(query)
-      .populate("storeId", ["name", "logo", "slug"])
+      //.populate("storeId", ["active", "name", "logo", "slug"])
+      .populate({
+        path: "storeId",
+        select: "active name logo slug ownerId",
+      })
       .populate("categories", ["name"])
       .limit(limit)
       .skip((pageNum - 1) * limit),
@@ -251,7 +292,44 @@ const searchProductsFunction = async (
   ]);
 
   console.log("[Backend] Found products:", query);
-  return { products, total: totalCount };
+
+  const filteredProducts = products.filter((p) => canUserSeeProduct(p, req));
+
+  return {
+    products: filteredProducts,
+    total: filteredProducts.length,
+  };
+  */
+
+  /* ---- 1️⃣ traer TODOS los productos que cumplen la query ---- */
+  const allProducts = await product.find(query).populate({
+    path: "storeId",
+    select: "active ownerId",
+  });
+
+  /* ---- 2️⃣ filtrar por visibilidad ---- */
+  const visibleProducts = allProducts.filter((p) => canUserSeeProduct(p, user));
+
+  const total = visibleProducts.length;
+
+  /* ---- 3️⃣ paginar SOBRE los visibles ---- */
+  const paginatedProducts = visibleProducts
+    .slice((pageNum - 1) * limit, pageNum * limit)
+    .map((p) => p._id);
+
+  /* ---- 4️⃣ volver a pedir SOLO los de la página (con populate completo) ---- */
+  const products = await product
+    .find({ _id: { $in: paginatedProducts } })
+    .populate({
+      path: "storeId",
+      select: "name logo slug active ownerId",
+    })
+    .populate("categories", ["name"]);
+
+  return {
+    products,
+    total,
+  };
 };
 
 const searchProducts = async (req, res) => {
@@ -264,7 +342,8 @@ const searchProducts = async (req, res) => {
       offer,
       stores,
       min,
-      max
+      max,
+      req.user
     );
     return res.status(200).json(result);
   } catch (error) {
@@ -340,11 +419,17 @@ const getRelatedProducts = async (req, res) => {
         categories: { $in: categoryObjectIds },
         deletedAt: { $exists: false },
       })
-      .populate("storeId", ["name", "slug", "logo"])
-      .populate("categories", ["name"])
-      .limit(Number(limit) || 8);
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
+      .populate("categories", ["name"]);
 
-    return res.status(200).json(relatedProducts);
+    const filteredProducts = relatedProducts.filter((p) =>
+      canUserSeeProduct(p, req.user)
+    );
+
+    return res.status(200).json(filteredProducts);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }

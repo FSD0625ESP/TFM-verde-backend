@@ -17,11 +17,11 @@ const generateSlug = (text) => {
 };
 
 /* GET - /stores/all
-   Get all stores
+   Get all stores where active is true
 */
 const getAllStores = async (req, res) => {
   try {
-    const stores = await Store.find({})
+    const stores = await Store.find({ active: true })
       .populate("categories", "name")
       .populate("ownerId", "firstName lastName email");
     return res.status(200).json(stores);
@@ -47,10 +47,9 @@ const getStoreById = async (req, res) => {
 */
 const getStoreBySellerId = async (req, res) => {
   try {
-    const store = await Store.findOne({ ownerId: req.params.id }).populate(
-      "categories",
-      "name"
-    ).populate("ownerId", "firstName lastName email profileImage");
+    const store = await Store.findOne({ ownerId: req.params.id })
+      .populate("categories", "name")
+      .populate("ownerId", "firstName lastName email profileImage");
     if (!store) {
       return res.status(404).json({ msg: "Tienda no encontrada" });
     }
@@ -81,7 +80,37 @@ const registerStore = async (req, res) => {
   }
 };
 
+/* PATCH - /stores/update/:storeId/:userId
+   Update a store by ID - only the owner can update
+*/
+const updateStoreById = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return res.status(404).json({ msg: "Tienda no encontrada" });
+    }
+    if (store.ownerId.toString() !== req.params.userId) {
+      return res
+        .status(403)
+        .json({ msg: "No tienes permiso para editar esta tienda" });
+    }
+    const updatedStore = await Store.findByIdAndUpdate(storeId, req.body, {
+      new: true,
+    });
+    return res
+      .status(200)
+      .json({ msg: `Producto actualizado`, store: updatedStore });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ msg: "Error al actualizar el producto", error: error.message });
+  }
+};
+
 // Search stores with filters and pagination
+// GET - /stores/search
+// solo mostrar stores activas (active: true)
 const searchStoresFunction = async (
   page = 1,
   text = "",
@@ -90,7 +119,10 @@ const searchStoresFunction = async (
   maxRating = 5
 ) => {
   const limit = 20;
-  const query = { deletedAt: { $exists: false }, status: "active" };
+  const query = {
+    deletedAt: { $exists: false },
+    active: true,
+  };
 
   // normalize numeric params
   const pageNum = Number(page) || 1;
@@ -144,7 +176,7 @@ const searchStoresFunction = async (
       .populate("ownerId", "firstName lastName email profileImage")
       .limit(limit)
       .skip((pageNum - 1) * limit),
-    Store.countDocuments(query)
+    Store.countDocuments(query),
   ]);
 
   return { stores, total: totalCount };
@@ -164,7 +196,9 @@ const searchStores = async (req, res) => {
       maxRating
     );
 
-    console.log(`[Backend] Found ${result.stores.length} stores, total: ${result.total}`);
+    console.log(
+      `[Backend] Found ${result.stores.length} stores, total: ${result.total}`
+    );
     return res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -204,7 +238,13 @@ const getStoreAppearance = async (req, res) => {
 const updateStoreAppearance = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { showFeaturedSection, showOfferSection, sectionsOrder, showSlider, sliderImages } = req.body;
+    const {
+      showFeaturedSection,
+      showOfferSection,
+      sectionsOrder,
+      showSlider,
+      sliderImages,
+    } = req.body;
 
     const store = await Store.findById(storeId);
     if (!store) {
@@ -212,7 +252,9 @@ const updateStoreAppearance = async (req, res) => {
     }
 
     if (store.ownerId.toString() !== req.user.id) {
-      return res.status(403).json({ msg: "No tienes permiso para editar esta tienda" });
+      return res
+        .status(403)
+        .json({ msg: "No tienes permiso para editar esta tienda" });
     }
 
     if (showFeaturedSection !== undefined) {
@@ -235,7 +277,11 @@ const updateStoreAppearance = async (req, res) => {
       const isValidValues = normalized.every((v) => allowed.has(v));
       const isUnique = new Set(normalized).size === normalized.length;
       if (!isValidLength || !isValidValues || !isUnique) {
-        return res.status(400).json({ msg: "sectionsOrder debe ser ['featured','offers'] (en el orden que quieras)" });
+        return res
+          .status(400)
+          .json({
+            msg: "sectionsOrder debe ser ['featured','offers'] (en el orden que quieras)",
+          });
       }
       store.appearance.sectionsOrder = normalized;
     }
@@ -251,7 +297,9 @@ const updateStoreAppearance = async (req, res) => {
         (v) => typeof v === "string" && v.trim().length > 0
       );
       if (!allStrings) {
-        return res.status(400).json({ msg: "sliderImages debe ser un array de URLs (string)" });
+        return res
+          .status(400)
+          .json({ msg: "sliderImages debe ser un array de URLs (string)" });
       }
 
       store.appearance.sliderImages = sliderImages;
@@ -297,7 +345,10 @@ const uploadStoreImage = async (req, res) => {
     }
 
     // Use uploadImage from uploadController (uses cloudinary)
-    const result = await uploadImage(req.file.path, `stores/${storeId}/${type || 'image'}`);
+    const result = await uploadImage(
+      req.file.path,
+      `stores/${storeId}/${type || "image"}`
+    );
 
     // Guardar en el campo correcto según el tipo
     if (type === "logo") {
@@ -458,7 +509,9 @@ const toggleProductFeatured = async (req, res) => {
 
     const store = await Store.findById(product.storeId);
     if (store.ownerId.toString() !== req.user.id) {
-      return res.status(403).json({ msg: "No tienes permiso para editar este producto" });
+      return res
+        .status(403)
+        .json({ msg: "No tienes permiso para editar este producto" });
     }
 
     product.destacado = destacado === true;
@@ -489,7 +542,9 @@ const toggleProductOffer = async (req, res) => {
 
     const store = await Store.findById(product.storeId);
     if (store.ownerId.toString() !== req.user.id) {
-      return res.status(403).json({ msg: "No tienes permiso para editar este producto" });
+      return res
+        .status(403)
+        .json({ msg: "No tienes permiso para editar este producto" });
     }
 
     product.oferta = oferta === true;
@@ -508,6 +563,7 @@ const toggleProductOffer = async (req, res) => {
 module.exports = {
   getAllStores,
   registerStore,
+  updateStoreById,
   searchStoresFunction,
   searchStores,
   getStoreById,

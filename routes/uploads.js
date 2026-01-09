@@ -3,11 +3,18 @@ const router = express.Router();
 const {
   uploadMiddleware,
   uploadProductImage,
+  deleteProductImage,
   uploadProfileImage,
 } = require("../controllers/uploadController");
 const { isAuthenticated } = require("../middlewares/authMiddleware");
 
 router.post("/product/image", uploadMiddleware, uploadProductImage);
-router.post("/profile/image", isAuthenticated, uploadMiddleware, uploadProfileImage);
+router.delete("/product/image", isAuthenticated, deleteProductImage);
+router.post(
+  "/profile/image",
+  isAuthenticated,
+  uploadMiddleware,
+  uploadProfileImage
+);
 
 module.exports = router;

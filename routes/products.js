@@ -14,13 +14,14 @@ const {
   getRelatedProducts,
 } = require("../controllers/productController");
 const { isAuthenticated } = require("../middlewares/authMiddleware");
+const { optionalAuth } = require("../middlewares/optionalAuth");
 
 router.get("/all", getAllProducts);
 router.get("/store/:id", getAllProductsByStoreId);
-router.get("/featured", getAllFeaturedProducts);
-router.get("/offer", getAllOfferProducts);
-router.get("/search", searchProducts);
-router.get("/related/:id", getRelatedProducts);
+router.get("/featured", optionalAuth, getAllFeaturedProducts);
+router.get("/offer", optionalAuth, getAllOfferProducts);
+router.get("/search", optionalAuth, searchProducts);
+router.get("/related/:id", optionalAuth, getRelatedProducts);
 router.get("/product/:id", getProductById);
 router.delete(
   "/delete-product/:id/:userId",

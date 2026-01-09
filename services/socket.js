@@ -168,13 +168,10 @@ const setupSocketIO = (io) => {
         userId: socket.userId,
         userEmail: socket.userEmail,
       });
-    });
-    if (!productViewers.has(productId)) {
-      productViewers.set(productId, new Set());
-    }
 
-    productViewers.get(productId).add(socket.id);
-    socket.data.currentProduct = productId;
+    });
+
+
 
     // Marcar mensajes como leídos
     socket.on("mark_as_read", async ({ chatId }) => {
@@ -232,8 +229,8 @@ const setupSocketIO = (io) => {
     });
 
     socket.on("join_product", async ({ productId, storeOwnerId }) => {
+      console.log("Joining product:", productId);
       if (!productId) return;
-
       // ⛔ excluir al owner
       if (storeOwnerId && socket.userId === storeOwnerId) return;
 
@@ -293,25 +290,6 @@ const setupSocketIO = (io) => {
       connectedUsers.delete(socket.userId);
       io.emit("user_offline", { userId: socket.userId });
 
-      /* INICIO control de usuarios que están viendo un producto */
-      /*
-      const productId = socket.data.currentProduct;
-      if (productId) {
-        const viewers = productViewers.get(productId);
-        if (viewers) {
-          viewers.delete(socket.id);
-  
-          if (viewers.size === 0) {
-            productViewers.delete(productId);
-          }
-  
-          io.to(`product:${productId}`).emit("product_viewers_update", {
-            productId,
-            count: viewers.size,
-          });
-        }
-      }
-        */
       const productId = socket.data.currentProduct;
       if (productId) {
         const usersMap = productViewers.get(productId);

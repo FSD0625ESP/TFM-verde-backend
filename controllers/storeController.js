@@ -319,7 +319,7 @@ const updateStoreAppearance = async (req, res) => {
 
 
 const getActiveStoresIds = async () => {
-  const stores = await Store.find({ status: "active" }).select("_id");
+  const stores = await Store.find({ active: true }).select("_id");
   return stores.map((s) => s._id);
 }
 

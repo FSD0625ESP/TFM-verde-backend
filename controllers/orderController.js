@@ -1,5 +1,10 @@
 const Order = require("../models/order");
 const mongoose = require("mongoose");
+const Address = require("../models/address");
+const Delivery = require("../models/delivery");
+const { geocodeAddress, getRoute, interpolateRoute, hasToken } = require("../services/mapbox");
+
+const WAREHOUSE_ADDRESS = "Carrer de Mèxic, 17, 4, Sants-Montjuïc, 08004 Barcelona";
 
 // Obtener todas las órdenes del usuario
 const getOrders = async (req, res) => {
@@ -28,7 +33,7 @@ const getOrderById = async (req, res) => {
   try {
     const order = await Order.findOne({
       _id: req.params.id,
-      customerId: req.user._id,
+      customerId: req.user.id,
     })
       .populate("items.productId")
       .populate("addressId");
@@ -72,6 +77,51 @@ const createOrder = async (req, res) => {
       addressId,
       items,
     });
+
+    // Crear delivery simulado (dev) para tracking en tiempo real
+    // - Origen: dirección hardcoded (almacén)
+    // - Destino: addressId del pedido
+    try {
+      const address = await Address.findById(addressId).lean();
+      if (address) {
+        const destinationText = `${address.street}, ${address.postalCode} ${address.city}, ${address.state}, ${address.country || "España"}`;
+
+        let origin;
+        let destination;
+
+        if (hasToken()) {
+          origin = await geocodeAddress(WAREHOUSE_ADDRESS);
+          destination = await geocodeAddress(destinationText);
+        } else {
+          // Fallback razonable sin Mapbox (centro BCN aproximado + jitter)
+          origin = { lat: 41.3735, lng: 2.1492 };
+          destination = { lat: 41.3851, lng: 2.1734 };
+        }
+
+        let route;
+        try {
+          route = hasToken() ? await getRoute({ origin, destination }) : interpolateRoute({ origin, destination, steps: 40 });
+        } catch (_) {
+          route = interpolateRoute({ origin, destination, steps: 40 });
+        }
+
+        const delivery = await Delivery.create({
+          orderId: order._id,
+          status: "pending",
+          origin: { lat: origin.lat, lng: origin.lng },
+          destination: { lat: destination.lat, lng: destination.lng },
+          route,
+          currentIndex: 0,
+          startedAt: null,
+          eta: null,
+        });
+
+        // Añadimos deliveryId como extra (no rompe si el frontend ignora la prop)
+        order.deliveryId = delivery._id;
+      }
+    } catch (_) {
+      // Si algo falla, el pedido sigue creándose (no rompemos checkout)
+    }
 
     console.log("✅ Orden creada:", order._id);
     res.status(201).json(order);

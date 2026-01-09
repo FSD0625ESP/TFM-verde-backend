@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const product = require("../models/product");
 const store = require("../models/store");
 const generateSlug = require("../utils/generateSlug");
+const getActiveStoresIds = require("./storeController").getActiveStoresIds;
 
 /* GET - /products/all
    Get all products
@@ -134,30 +135,32 @@ const searchProductsFunction = async (
   const limit = 20;
   const query = { deletedAt: { $exists: false } };
 
+  // la tienda debe estar en estado "active"
+  // (esto se aplica en el seed de productos y en la creación de productos nuevos)
+  const activeStoreIds = await getActiveStoresIds();
+  query.storeId = { $in: activeStoreIds };
+
   // normalize numeric params
   const pageNum = Number(page) || 1;
   const minNum = Number(min) || 0;
   const maxNum = Number(max) || 500;
 
   if (text) {
-    // title or description contains text (case-insensitive)
+    const safeText = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     query.$or = [
-      { title: { $regex: `^${text}$`, $options: "i" } },
-      { title: { $regex: `.*${text}.*`, $options: "i" } },
-      { description: { $regex: `^${text}$`, $options: "i" } },
-      { description: { $regex: `.*${text}.*`, $options: "i" } },
+      { title: { $regex: safeText, $options: "i" } },
+      { description: { $regex: safeText, $options: "i" } }
     ];
   }
 
   // categories — accept array or comma-separated string
-  if (categories) {
+  if (categories && categories.length > 0) {
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
         ? categories.split(",")
         : [];
 
-    console.log("[Backend] Processing categories:", cats);
 
     // convert to ObjectId instances if possible
     const catObjectIds = cats
@@ -180,18 +183,16 @@ const searchProductsFunction = async (
     if (catObjectIds.length > 0) {
       // Use $in for products that match ANY of the selected categories
       query.categories = { $in: catObjectIds };
-      console.log("[Backend] Added categories filter to query");
     }
   }
 
-  if (stores) {
+  if (stores && stores.length > 0) {
     const strs = Array.isArray(stores)
       ? stores
       : typeof stores === "string"
         ? stores.split(",")
         : [];
 
-    console.log("[Backend] Processing stores:", strs);
 
     // convert to ObjectId instances if possible
     const storeObjectIds = strs

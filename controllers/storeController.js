@@ -90,7 +90,7 @@ const searchStoresFunction = async (
   maxRating = 5
 ) => {
   const limit = 20;
-  const query = { deletedAt: { $exists: false } };
+  const query = { deletedAt: { $exists: false }, status: "active" };
 
   // normalize numeric params
   const pageNum = Number(page) || 1;
@@ -268,6 +268,12 @@ const updateStoreAppearance = async (req, res) => {
     res.status(500).json({ msg: error.message });
   }
 };
+
+
+const getActiveStoresIds = async () => {
+  const stores = await Store.find({ status: "active" }).select("_id");
+  return stores.map((s) => s._id);
+}
 
 /* POST - /stores/:storeId/image
    Upload store featured image or logo
@@ -515,4 +521,5 @@ module.exports = {
   getOfferProducts,
   toggleProductFeatured,
   toggleProductOffer,
+  getActiveStoresIds,
 };

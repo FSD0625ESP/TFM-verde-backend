@@ -16,7 +16,7 @@ router.use(isAuthenticated);
 router.get("/", getOrders);
 
 // Obtener una orden específica
-router.get("/:id", getOrderById);
+router.get("/:id", isAuthenticated, getOrderById);
 
 // Crear una nueva orden
 router.post("/", createOrder);

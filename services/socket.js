@@ -1,8 +1,98 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 
-// Mapa para rastrear usuarios conectados
+// Mapa para rastrear usuarios conectados (soporta múltiples pestañas/sockets por usuario)
+// userId -> Set<socketId>
 const connectedUsers = new Map();
+
+const addConnectedSocket = (userId, socketId) => {
+    if (!connectedUsers.has(userId)) {
+        connectedUsers.set(userId, new Set());
+    }
+    connectedUsers.get(userId).add(socketId);
+};
+
+const removeConnectedSocket = (userId, socketId) => {
+    const socketIds = connectedUsers.get(userId);
+    if (!socketIds) return;
+    socketIds.delete(socketId);
+    if (socketIds.size === 0) {
+        connectedUsers.delete(userId);
+    }
+};
+
+const getUserSocketIds = (userId) => {
+    const socketIds = connectedUsers.get(userId);
+    if (!socketIds) return [];
+    return Array.from(socketIds);
+};
+
+const emitToUser = (io, userId, event, payload) => {
+    const socketIds = getUserSocketIds(userId);
+    socketIds.forEach((socketId) => io.to(socketId).emit(event, payload));
+};
+
+const canAccessOrder = async ({ userId, orderId }) => {
+    const Order = require("../models/order");
+    const Store = require("../models/store");
+
+    if (!orderId) return false;
+
+    const order = await Order.findById(orderId).select("customerId storeId");
+    if (!order) return false;
+
+    if (order.customerId?.toString() === userId) return true;
+
+    const store = await Store.findById(order.storeId).select("ownerId");
+    if (store?.ownerId?.toString() === userId) return true;
+
+    return false;
+};
+
+const getUserChatIds = async (userId) => {
+    const Chat = require("../models/chat");
+
+    // Ideal: query por ownerId/userId (sin resolver Store). Fallback legacy: si hay chats sin ownerId,
+    // el join se completará cuando el cliente abra el dropdown (join_chats) o tras backfill.
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const chats = await Chat.find({
+        $or: [
+            { userId: userObjectId },
+            { ownerId: userObjectId },
+        ],
+        deletedAt: null,
+    }).select("_id");
+
+    return chats.map((c) => c._id.toString());
+};
+
+const computeUnreadTotalForUser = async (userId) => {
+    const Chat = require("../models/chat");
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const customerAgg = await Chat.aggregate([
+        { $match: { userId: userObjectId, deletedAt: null } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ["$customerUnreadCount", 0] } } } },
+    ]);
+
+    const ownerAgg = await Chat.aggregate([
+        { $match: { ownerId: userObjectId, deletedAt: null } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ["$ownerUnreadCount", 0] } } } },
+    ]);
+
+    return (customerAgg?.[0]?.total || 0) + (ownerAgg?.[0]?.total || 0);
+};
+
+const emitUnreadCountToUser = async (io, userId) => {
+    try {
+        const total = await computeUnreadTotalForUser(userId);
+        emitToUser(io, userId, "unread_messages_count", total);
+    } catch (_) {
+        // noop
+    }
+};
 
 /**
  * Configura Socket.IO con autenticación y event handlers
@@ -15,20 +105,20 @@ const setupSocketIO = (io) => {
         const cookies = socket.handshake.headers.cookie;
 
         if (!cookies) {
-            return next(new Error("Authentication error: No cookies provided"));
+            return next(new Error("Error de autenticación: no se proporcionaron cookies"));
         }
 
         // Parsear las cookies para obtener el token
         const tokenCookie = cookies.split('; ').find(row => row.startsWith('token='));
 
         if (!tokenCookie) {
-            return next(new Error("Authentication error: No token in cookies"));
+            return next(new Error("Error de autenticación: no hay token en las cookies"));
         }
 
         const token = tokenCookie.split('=')[1];
 
         if (!token) {
-            return next(new Error("Authentication error: Empty token"));
+            return next(new Error("Error de autenticación: token vacío"));
         }
 
         try {
@@ -37,21 +127,39 @@ const setupSocketIO = (io) => {
             socket.userEmail = decoded.email;
             next();
         } catch (error) {
-            next(new Error("Authentication error: Invalid token"));
+            next(new Error("Error de autenticación: token inválido"));
         }
     });
 
     io.on("connection", (socket) => {
-        // Registrar usuario conectado
-        connectedUsers.set(socket.userId, socket.id);
+
+        // Registrar usuario conectado (multi-tab)
+        addConnectedSocket(socket.userId, socket.id);
         // Notificar presencia
-        io.emit("user_online", { userId: socket.userId });
+        if (connectedUsers.get(socket.userId)?.size === 1) {
+            io.emit("user_online", { userId: socket.userId });
+        }
+
+        const joinMyChats = async () => {
+            const chatIds = await getUserChatIds(socket.userId);
+            chatIds.forEach((chatId) => socket.join(`chat:${chatId}`));
+            await emitUnreadCountToUser(io, socket.userId);
+        };
+
+        // Auto-join al conectar para recibir mensajes aunque el dropdown/chat no se abra
+        joinMyChats().catch(() => { /* noop */ });
+
+        // Permite reintentar/forzar join desde el cliente
+        socket.on("join_my_chats", async () => {
+            await joinMyChats();
+        });
 
         // Usuario se une a sus salas de chat
         socket.on("join_chats", (chatIds) => {
             chatIds.forEach((chatId) => {
                 socket.join(`chat:${chatId}`);
             });
+            emitUnreadCountToUser(io, socket.userId);
         });
 
         // Consulta de presencia por IDs
@@ -66,6 +174,111 @@ const setupSocketIO = (io) => {
         // Enviar mensaje
         socket.on("send_message", async (data) => {
             await handleSendMessage(socket, io, data);
+        });
+
+        // =========================
+        // Delivery tracking (simulado)
+        // =========================
+        socket.on("join_delivery", async ({ deliveryId }) => {
+            try {
+                if (!deliveryId) return;
+                const Delivery = require("../models/delivery");
+                const Order = require("../models/order");
+                const Store = require("../models/store");
+
+                const delivery = await Delivery.findById(deliveryId);
+                if (!delivery) return;
+
+                const order = await Order.findById(delivery.orderId).select("customerId storeId");
+                if (!order) return;
+
+                const isCustomer = order.customerId?.toString() === socket.userId;
+                const store = await Store.findById(order.storeId).select("ownerId");
+                const isOwner = store?.ownerId?.toString() === socket.userId;
+
+                if (!isCustomer && !isOwner) return;
+
+                const room = `delivery:${deliveryId}`;
+                socket.join(room);
+
+                const route = Array.isArray(delivery.route) ? delivery.route : [];
+                const idx = Math.max(0, Math.min(delivery.currentIndex || 0, Math.max(route.length - 1, 0)));
+                const currentLocation = route[idx] || delivery.origin;
+
+                socket.emit("delivery_update", {
+                    deliveryId: delivery._id.toString(),
+                    orderId: delivery.orderId?.toString?.() || delivery.orderId,
+                    status: delivery.status,
+                    origin: delivery.origin,
+                    destination: delivery.destination,
+                    route,
+                    currentIndex: idx,
+                    currentLocation,
+                    startedAt: delivery.startedAt,
+                    eta: delivery.eta,
+                });
+            } catch (_) {
+                // noop
+            }
+        });
+
+        // =========================
+        // Order tracking (simulado)
+        // =========================
+        socket.on("join_order", async ({ orderId }) => {
+            try {
+                if (!orderId) return;
+                const allowed = await canAccessOrder({ userId: socket.userId, orderId });
+                if (!allowed) return;
+
+                socket.join(`order:${orderId}`);
+
+                const Order = require("../models/order");
+                const order = await Order.findById(orderId).select("_id status");
+                if (!order) return;
+
+                socket.emit("order_update", {
+                    orderId: order._id.toString(),
+                    status: order.status,
+                });
+            } catch (_) {
+                // noop
+            }
+        });
+
+        socket.on("start_order_shipping", async ({ orderId }) => {
+            try {
+                if (!orderId) return;
+                const allowed = await canAccessOrder({ userId: socket.userId, orderId });
+                if (!allowed) return;
+
+                const Order = require("../models/order");
+                const Delivery = require("../models/delivery");
+                const { startDeliverySimulation } = require("./deliverySimulation");
+
+                const order = await Order.findById(orderId).select("_id status");
+                if (!order) return;
+
+                // Pasar a shipped si procede
+                if (order.status === "pending") {
+                    order.status = "shipped";
+                    await order.save();
+                }
+
+                io.to(`order:${order._id.toString()}`).emit("order_update", {
+                    orderId: order._id.toString(),
+                    status: order.status,
+                });
+
+                // Arrancar el delivery asociado
+                const delivery = await Delivery.findOne({ orderId: order._id });
+                if (!delivery) return;
+
+                // Arrancar simulación (si ya estaba on_route, esto es idempotente)
+                startDeliverySimulation({ io, deliveryId: delivery._id.toString(), orderId: order._id.toString() }).catch(() => { /* noop */ });
+            } catch (_) {
+                // noop
+            }
         });
 
         // Usuario está escribiendo
@@ -98,8 +311,13 @@ const setupSocketIO = (io) => {
                 const now = new Date();
                 if (chat.userId.toString() === socket.userId) {
                     chat.customerLastReadAt = now;
+                    chat.customerUnreadCount = 0;
                 } else if (store?.ownerId?.toString() === socket.userId) {
                     chat.ownerLastReadAt = now;
+                    chat.ownerUnreadCount = 0;
+                    if (!chat.ownerId) {
+                        chat.ownerId = store.ownerId;
+                    }
                 }
                 await chat.save();
                 socket.to(`chat:${chatId}`).emit("messages_read", {
@@ -107,6 +325,8 @@ const setupSocketIO = (io) => {
                     userId: socket.userId,
                     at: now,
                 });
+
+                await emitUnreadCountToUser(io, socket.userId);
             } catch (_) {
                 // noop
             }
@@ -114,8 +334,10 @@ const setupSocketIO = (io) => {
 
         // Desconexión
         socket.on("disconnect", () => {
-            connectedUsers.delete(socket.userId);
-            io.emit("user_offline", { userId: socket.userId });
+            removeConnectedSocket(socket.userId, socket.id);
+            if (!connectedUsers.has(socket.userId)) {
+                io.emit("user_offline", { userId: socket.userId });
+            }
         });
     });
 };
@@ -155,14 +377,44 @@ const handleSendMessage = async (socket, io, data) => {
             return socket.emit("error", { message: "Usuario no encontrado" });
         }
 
+        // Asegurar ownerId desnormalizado para futuras consultas rápidas
+        if (!chat.ownerId && store?.ownerId) {
+            chat.ownerId = store.ownerId;
+        }
+
+        // Marcar como leído para el remitente (al enviar, por definición está al día)
+        const now = new Date();
+        if (isCustomer) {
+            chat.customerLastReadAt = now;
+            chat.customerUnreadCount = 0;
+        } else if (isOwner) {
+            chat.ownerLastReadAt = now;
+            chat.ownerUnreadCount = 0;
+        }
+
         // Añadir mensaje con ObjectId
         const newMessage = {
             senderId: new mongoose.Types.ObjectId(socket.userId),
             text: text.trim(),
-            timestamp: new Date(),
+            timestamp: now,
         };
 
         chat.messages.push(newMessage);
+
+        // Mantener lastMessage desnormalizado
+        chat.lastMessage = {
+            senderId: newMessage.senderId,
+            text: newMessage.text,
+            timestamp: newMessage.timestamp,
+        };
+
+        // Incrementar no leídos del receptor (O(1))
+        if (isCustomer) {
+            chat.ownerUnreadCount = Number(chat.ownerUnreadCount || 0) + 1;
+        } else if (isOwner) {
+            chat.customerUnreadCount = Number(chat.customerUnreadCount || 0) + 1;
+        }
+
         await chat.save();
 
         // Obtener el mensaje recién guardado con su _id
@@ -185,6 +437,12 @@ const handleSendMessage = async (socket, io, data) => {
             chatId,
             message: messageWithSender,
         });
+
+        // Actualizar contador total de no leídos para ambos participantes
+        const customerId = chat.userId?.toString();
+        const ownerId = store?.ownerId?.toString();
+        if (customerId) await emitUnreadCountToUser(io, customerId);
+        if (ownerId) await emitUnreadCountToUser(io, ownerId);
     } catch (error) {
         socket.emit("error", { message: "Error al enviar mensaje" });
     }
@@ -196,7 +454,8 @@ const handleSendMessage = async (socket, io, data) => {
  * @returns {string|undefined} Socket ID del usuario
  */
 const getUserSocketId = (userId) => {
-    return connectedUsers.get(userId);
+    const socketIds = getUserSocketIds(userId);
+    return socketIds[0];
 };
 
 /**

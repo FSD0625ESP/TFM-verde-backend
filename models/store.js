@@ -12,6 +12,11 @@ const storeSchema = new mongoose.Schema(
     description: { type: String, required: true },
     logo: { type: String },
     image: { type: String },
+    status: {
+      type: String,
+      enum: ["active", "pending"],
+      default: "pending",
+    },
     categories: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "Category",

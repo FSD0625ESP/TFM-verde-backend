@@ -2,6 +2,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "stores:activate": "node utils/activateAllStores.js",
     "seed": "node seeds/stores.js",
     "seedChat": "node seeds/chats.js",
     "seedAnalytics": "node seeds/analytics.js",

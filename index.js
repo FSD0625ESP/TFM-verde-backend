@@ -34,10 +34,10 @@ const chatRoutes = require("./routes/chats");
 const uploadRoutes = require("./routes/uploads");
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
+const deliveryRoutes = require("./routes/deliveries");
+const analyticsRoutes = require("./routes/analytics");
 const mongoose = require("mongoose");
-require("dotenv").config();
 
-app.use(cookieParser());
 
 app.use(
   cors({
@@ -54,7 +54,6 @@ const io = new Server(server, {
   },
 });
 
-require("dotenv").config();
 app.use(express.json());
 
 mongoose
@@ -63,7 +62,7 @@ mongoose
   .catch((err) => console.log(err));
 
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("This is the backend server for the e-commerce application.");
 });
 
 app.use("/users", userRoutes);
@@ -76,6 +75,8 @@ app.use("/chats", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
 app.use("/orders", orderRoutes);
+app.use("/deliveries", deliveryRoutes);
+app.use("/analytics", analyticsRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

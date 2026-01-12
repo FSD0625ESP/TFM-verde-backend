@@ -17,45 +17,120 @@ cloudinary.config({
 exports.uploadProductImage = async (req, res) => {
   try {
     const file = req.file;
-    if (!file) {
-      return res.status(400).json({ error: "No se ha recibido ningún archivo" });
+    const { productId, replace, imageIndex, delete: deleteImage } = req.body;
+
+    if (!productId) {
+      return res.status(400).json({ error: "productId requerido" });
     }
 
-    const uploadToCloudinary = () =>
-      new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "products",
-          },
-          (error, result) => {
-            if (error) return reject(error);
-            resolve(result);
-          }
-        );
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
 
-        stream.end(file.buffer);
+    /* 🗑️ BORRAR IMAGEN */
+    if (deleteImage === "true") {
+      if (imageIndex == null) {
+        return res.status(400).json({ error: "imageIndex requerido" });
+      }
+
+      const img = product.images[imageIndex];
+      if (!img) {
+        return res.status(404).json({ error: "Imagen no encontrada" });
+      }
+
+      await cloudinary.uploader.destroy(img.public_id);
+
+      product.images.splice(imageIndex, 1);
+      await product.save();
+
+      return res.status(200).json({
+        msg: "Imagen eliminada correctamente",
+        images: product.images,
       });
-
-    const result = await uploadToCloudinary();
-
-    let updatedProduct = null;
-    if (req.body.productId) {
-      updatedProduct = await Product.findByIdAndUpdate(
-        req.body.productId,
-        { $push: { images: result.secure_url } },
-        { new: true }
-      );
     }
+
+    /* SUBIR / REEMPLAZAR */
+    if (!file) {
+      return res.status(400).json({ error: "No se recibió imagen" });
+    }
+
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "products" },
+        (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        }
+      );
+      stream.end(file.buffer);
+    });
+
+    const newImage = {
+      url: uploadResult.secure_url,
+      public_id: uploadResult.public_id,
+    };
+
+    /* REEMPLAZAR IMAGEN MODIFICADA */
+    if (replace === "true") {
+      if (imageIndex == null) {
+        return res.status(400).json({ error: "imageIndex requerido" });
+      }
+
+      const oldImage = product.images[imageIndex];
+      if (!oldImage) {
+        return res.status(404).json({ error: "Imagen a reemplazar no existe" });
+      }
+
+      await cloudinary.uploader.destroy(oldImage.public_id);
+
+      product.images[imageIndex] = newImage;
+      await product.save();
+
+      return res.status(200).json({
+        msg: "Imagen reemplazada correctamente",
+        image: newImage,
+      });
+    }
+
+    /* AÑADIR NUEVA */
+    product.images.push(newImage);
+    await product.save();
 
     return res.status(200).json({
-      url: result.secure_url,
-      product: updatedProduct,
+      msg: "Imagen añadida correctamente",
+      image: newImage,
     });
   } catch (err) {
+    console.error(err);
     if (!res.headersSent) {
       return res.status(500).json({ error: err.message });
     }
   }
+};
+
+exports.deleteProductImage = async (req, res) => {
+  const { productId, public_id } = req.body;
+
+  const product = await Product.findById(productId);
+  if (!product) {
+    return res.status(404).json({ error: "Producto no encontrado" });
+  }
+
+  const index = product.images.findIndex((img) => img.public_id === public_id);
+
+  if (index === -1) {
+    return res.status(404).json({ error: "Imagen no encontrada" });
+  }
+
+  const image = product.images[index];
+
+  await cloudinary.uploader.destroy(image.public_id);
+
+  product.images.splice(index, 1);
+  await product.save();
+
+  return res.json({ success: true });
 };
 
 exports.uploadProfileImage = async (req, res) => {
@@ -64,7 +139,9 @@ exports.uploadProfileImage = async (req, res) => {
     const userId = req.user.id;
 
     if (!file) {
-      return res.status(400).json({ error: "No se ha recibido ningún archivo" });
+      return res
+        .status(400)
+        .json({ error: "No se ha recibido ningún archivo" });
     }
 
     // Validar que sea una imagen
@@ -118,41 +195,20 @@ exports.uploadProfileImage = async (req, res) => {
 exports.uploadMiddleware = upload.single("image");
 
 // Helper para subir archivos a Cloudinary (usado por otras rutas)
-// Soporta tanto buffer como ruta de archivo
-exports.uploadImage = async (fileSource, folder = "uploads") => {
+exports.uploadImage = async (filePath, folder = "uploads") => {
   try {
-    let result;
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: "auto",
+    });
 
-    // Si es un buffer, usar upload_stream
-    if (Buffer.isBuffer(fileSource)) {
-      result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: folder,
-            resource_type: "auto",
-          },
-          (error, result) => {
-            if (error) return reject(error);
-            resolve(result);
-          }
-        );
-        stream.end(fileSource);
-      });
-    } else {
-      // Si es una ruta, usar upload directo
-      result = await cloudinary.uploader.upload(fileSource, {
-        folder: folder,
-        resource_type: "auto",
-      });
-
-      // Limpiar archivo temporal si existe
-      if (fileSource && fileSource.startsWith("/")) {
-        const fs = require("fs");
-        try {
-          fs.unlinkSync(fileSource);
-        } catch (e) {
-          // Ignorar error si no se puede eliminar
-        }
+    // Limpiar archivo temporal si existe
+    if (filePath && filePath.startsWith("/")) {
+      const fs = require("fs");
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {
+        // Ignorar error si no se puede eliminar
       }
     }
 

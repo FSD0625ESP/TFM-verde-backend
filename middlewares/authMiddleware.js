@@ -12,7 +12,26 @@ const isAuthenticated = (req, res, next) => {
     });
 };
 
+// Middleware de autenticación opcional (no bloquea si no hay token)
+// Útil para rutas que funcionan tanto para usuarios logueados como anónimos
+const optionalAuth = (req, res, next) => {
+    const token = req.cookies.token;
+    if (!token) {
+        req.user = null;
+        return next();
+    }
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            req.user = null;
+        } else {
+            req.user = user;
+        }
+        next();
+    });
+};
+
 module.exports = {
     isAuthenticated,
-    verifyToken: isAuthenticated // Alias para compatibilidad
+    verifyToken: isAuthenticated, // Alias para compatibilidad
+    optionalAuth,
 };

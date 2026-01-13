@@ -2,6 +2,7 @@ const Order = require("../models/order");
 const mongoose = require("mongoose");
 const Address = require("../models/address");
 const Delivery = require("../models/delivery");
+const Store = require("../models/store");
 const { geocodeAddress, getRoute, interpolateRoute, hasToken } = require("../services/mapbox");
 
 const WAREHOUSE_ADDRESS = "Carrer de Mèxic, 17, 4, Sants-Montjuïc, 08004 Barcelona";
@@ -30,6 +31,100 @@ const getOrders = async (req, res) => {
   } catch (err) {
     console.error("❌ Error en getOrders:", err);
     res.status(500).json({ error: "Error obteniendo las órdenes" });
+  }
+};
+
+const getAdminOrders = async (req, res) => {
+  try {
+    console.log("🔍 getAdminOrders - User ID (string):", req.user.id);
+    const storeId = await Store.findOne({ ownerId: req.user.id }).select("_id").lean();
+    if (!storeId) {
+      console.log("❗ Tienda no encontrada para el usuario:", req.user.id);
+      return res.status(404).json({ error: "Tienda no encontrada" });
+    }
+
+    // Parámetros de paginación y ordenación
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const sortField = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const search = req.query.search || '';
+
+    const skip = (page - 1) * limit;
+
+    // Construir objeto de ordenación
+    const sortObj = {};
+    sortObj[sortField] = sortOrder;
+
+    // Construir filtro base
+    const filter = { storeId: storeId._id };
+
+    console.log("🔍 getAdminOrders - Parámetros:", {
+      page,
+      limit,
+      sortField,
+      sortOrder,
+      search,
+      storeId: storeId._id,
+    });
+
+    // Si hay búsqueda, primero buscar usuarios que coincidan
+    if (search) {
+      const User = require("../models/user");
+      const searchRegex = new RegExp(search, 'i');
+
+      // Buscar usuarios que coincidan con nombre, apellido o email
+      const matchingUsers = await User.find({
+        $or: [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { email: searchRegex }
+        ]
+      }).select('_id').lean();
+
+      const userIds = matchingUsers.map(u => u._id);
+
+      // Construir array de condiciones de búsqueda
+      const orConditions = [
+        { status: searchRegex },
+        { customerId: { $in: userIds } }
+      ];
+
+      // Solo buscar por _id si el valor es un ObjectId válido
+      if (mongoose.Types.ObjectId.isValid(search)) {
+        orConditions.push({ _id: search });
+      }
+
+      filter.$or = orConditions;
+    }
+
+    // Usar el _id directamente - Mongoose lo convertirá automáticamente
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .populate("items.productId")
+        // populate user details
+        .populate("customerId", "firstName lastName email profileImage")
+        .populate("addressId")
+        .sort(sortObj)
+        .skip(skip)
+        .limit(limit),
+      Order.countDocuments(filter)
+    ]);
+
+    console.log("📦 Órdenes encontradas:", orders.length, "de", total);
+
+    res.json({
+      orders,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    console.error("❌ Error en getAdminOrders:", err);
+    res.status(500).json({ error: "Error obteniendo las órdenes", details: err.message });
   }
 };
 
@@ -162,19 +257,32 @@ const createOrder = async (req, res) => {
   }
 };
 
+const isUserAdmin = async ({ userId, order }) => {
+  const store = await Store.findById(order.storeId).select("ownerId");
+  if (store?.ownerId?.toString() === userId) return true;
+  return false;
+}
+
 // Actualizar una orden (ej. status)
 const updateOrder = async (req, res) => {
   try {
     const { status } = req.body;
-
     // Si se está actualizando el status, registrar la fecha
     const updateData = { ...req.body };
+
+    if (!isUserAdmin({ userId: req.user.id, order: await Order.findById(req.params.id) })) {
+      return res.status(403).json({ error: "No tienes permiso para actualizar esta orden" });
+    }
+
     if (status) {
       updateData[`statusDates.${status}`] = new Date();
     }
 
+    console.log("🔄 updateOrder - Datos a actualizar:", updateData);
+    console.log("🔄 updateOrder - Orden ID:", req.params.id, "Usuario ID:", req.user.id);
+
     const order = await Order.findOneAndUpdate(
-      { _id: req.params.id, customerId: req.user.id },
+      { _id: req.params.id },
       updateData,
       { new: true }
     );
@@ -182,7 +290,7 @@ const updateOrder = async (req, res) => {
     res.json(order);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error actualizando la orden" });
+    res.status(500).json({ error: "Error actualizando la orden", details: err.message });
   }
 };
 
@@ -208,4 +316,5 @@ module.exports = {
   createOrder,
   updateOrder,
   deleteOrder,
+  getAdminOrders,
 };

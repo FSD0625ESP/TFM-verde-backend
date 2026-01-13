@@ -18,6 +18,7 @@ const optionalAuth = (req, res, next) => {
     const token = req.cookies.token;
     if (!token) {
         req.user = null;
+        req.sessionId = null;
         return next();
     }
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {

@@ -39,7 +39,7 @@ const register = async (req, res) => {
     });
     const savedUser = await newUser.save();
     jwt.sign(
-      { id: savedUser._id },
+      { id: savedUser._id, role: savedUser.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
@@ -77,7 +77,7 @@ const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).send({ msg: "Contraseña inválida" });
     jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
@@ -153,7 +153,7 @@ const googleLogin = async (req, res) => {
     }
 
     jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
@@ -187,7 +187,7 @@ const generateForgotPasswordToken = async (req, res) => {
     if (!user)
       return res.status(404).send({ msg: "No se encontro el usuario" });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
     const temporalToken = new TemporalToken({ userId: user._id, token });

@@ -7,7 +7,8 @@ const isAuthenticated = (req, res, next) => {
     if (!token) return res.status(401).send({ msg: 'No token, authorization denied' });
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) return res.status(403).send({ msg: 'Token is not valid' });
-        req.user = user;
+        req.user = user; // user ya contiene { id, role } del token JWT
+        console.log('Authenticated user:', req.user);
         next();
     });
 };

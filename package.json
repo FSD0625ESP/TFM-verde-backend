@@ -10,7 +10,8 @@
     "seedAnalytics:verify": "node seeds/analytics.verify.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:analytics": "jest tests/analytics"
+    "test:analytics": "jest tests/analytics",
+    "reports": "node seeds/reports.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

@@ -1,11 +1,21 @@
 const Order = require("../models/order");
-const mongoose = require("mongoose");
-const Address = require("../models/address");
-const Delivery = require("../models/delivery");
+const User = require("../models/user");
+const Product = require("../models/product");
 const Store = require("../models/store");
-const { geocodeAddress, getRoute, interpolateRoute, hasToken } = require("../services/mapbox");
+const Address = require("../models/address");
+const Notification = require("../models/notification");
+const mongoose = require("mongoose");
+const { getIO, getUserSocketId } = require("../services/socket");
+const Delivery = require("../models/delivery");
+const {
+  geocodeAddress,
+  getRoute,
+  interpolateRoute,
+  hasToken,
+} = require("../services/mapbox");
 
-const WAREHOUSE_ADDRESS = "Carrer de Mèxic, 17, 4, Sants-Montjuïc, 08004 Barcelona";
+const WAREHOUSE_ADDRESS =
+  "Carrer de Mèxic, 17, 4, Sants-Montjuïc, 08004 Barcelona";
 
 // Obtener todas las órdenes del usuario
 const getOrders = async (req, res) => {
@@ -37,7 +47,9 @@ const getOrders = async (req, res) => {
 const getAdminOrders = async (req, res) => {
   try {
     console.log("🔍 getAdminOrders - User ID (string):", req.user.id);
-    const storeId = await Store.findOne({ ownerId: req.user.id }).select("_id").lean();
+    const storeId = await Store.findOne({ ownerId: req.user.id })
+      .select("_id")
+      .lean();
     if (!storeId) {
       console.log("❗ Tienda no encontrada para el usuario:", req.user.id);
       return res.status(404).json({ error: "Tienda no encontrada" });
@@ -46,9 +58,9 @@ const getAdminOrders = async (req, res) => {
     // Parámetros de paginación y ordenación
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const sortField = req.query.sortBy || 'createdAt';
-    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
-    const search = req.query.search || '';
+    const sortField = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+    const search = req.query.search || "";
 
     const skip = (page - 1) * limit;
 
@@ -71,23 +83,25 @@ const getAdminOrders = async (req, res) => {
     // Si hay búsqueda, primero buscar usuarios que coincidan
     if (search) {
       const User = require("../models/user");
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(search, "i");
 
       // Buscar usuarios que coincidan con nombre, apellido o email
       const matchingUsers = await User.find({
         $or: [
           { firstName: searchRegex },
           { lastName: searchRegex },
-          { email: searchRegex }
-        ]
-      }).select('_id').lean();
+          { email: searchRegex },
+        ],
+      })
+        .select("_id")
+        .lean();
 
-      const userIds = matchingUsers.map(u => u._id);
+      const userIds = matchingUsers.map((u) => u._id);
 
       // Construir array de condiciones de búsqueda
       const orConditions = [
         { status: searchRegex },
-        { customerId: { $in: userIds } }
+        { customerId: { $in: userIds } },
       ];
 
       // Solo buscar por _id si el valor es un ObjectId válido
@@ -108,7 +122,7 @@ const getAdminOrders = async (req, res) => {
         .sort(sortObj)
         .skip(skip)
         .limit(limit),
-      Order.countDocuments(filter)
+      Order.countDocuments(filter),
     ]);
 
     console.log("📦 Órdenes encontradas:", orders.length, "de", total);
@@ -119,22 +133,22 @@ const getAdminOrders = async (req, res) => {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (err) {
     console.error("❌ Error en getAdminOrders:", err);
-    res.status(500).json({ error: "Error obteniendo las órdenes", details: err.message });
+    res
+      .status(500)
+      .json({ error: "Error obteniendo las órdenes", details: err.message });
   }
 };
 
 // Obtener una orden por ID
 const getOrderById = async (req, res) => {
   try {
-    const order = await Order.findOne({
-      _id: req.params.id,
-      customerId: req.user.id,
-    })
+    console.log("🔍 getOrderById - User ID (string):", req.user.id);
+    const order = await Order.findById(req.params.id)
       .populate("items.productId")
       .populate("addressId");
 
@@ -165,9 +179,17 @@ const getOrderById = async (req, res) => {
 };
 
 // Crear una nueva orden
+// después de guardar en la base de datos, envía un correo de confirmación al usuario y al vendedor
 const createOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const { customerId, storeId, addressId, items } = req.body;
+    const { storeId, addressId, items } = req.body;
+
+    // el usuario tiene que estar autenticado
+    // así se evita que se pueda crear una orden para otro usuario
+    const customerId = req.user.id;
 
     console.log("📝 createOrder recibido:", {
       customerId,
@@ -180,16 +202,85 @@ const createOrder = async (req, res) => {
     if (!customerId) {
       return res.status(400).json({ message: "customerId es requerido" });
     }
+    const user = await User.findById(customerId).session(session);
+    if (!user) {
+      return res.status(400).json({ message: "El usuario no existe" });
+    }
     if (!storeId) {
       return res.status(400).json({ message: "storeId es requerido" });
     }
+    const store = await Store.findById(storeId).session(session);
+    if (!store) {
+      return res.status(400).json({ message: "La tienda no existe" });
+    }
+    const storeName = store.name;
     if (!addressId) {
       return res.status(400).json({ message: "addressId es requerido" });
+    }
+    const address = await Address.findById(addressId).session(session);
+    if (!address) {
+      return res.status(400).json({ message: "La dirección no existe" });
     }
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "items no puede estar vacío" });
     }
 
+    // Obtener productos
+    const productIds = items.map((i) => i.productId);
+    const products = await Product.find({ _id: { $in: productIds } }).session(
+      session
+    );
+
+    if (products.length !== items.length) {
+      throw new Error("Uno o más productos no existen");
+    }
+
+    let totalItems = 0;
+    let totalPrice = 0;
+
+    // Validar stock y preparar items
+    const orderItems = items.map((item) => {
+      const product = products.find((p) => p._id.equals(item.productId));
+
+      if (product.stock < item.quantity) {
+        throw new Error(`Stock insuficiente para ${product.title}`);
+      }
+
+      totalItems += item.quantity;
+      totalPrice += product.price * item.quantity;
+
+      return {
+        productId: product._id,
+        quantity: item.quantity,
+        price: product.price,
+      };
+    });
+
+    // Reducir stock de los productos en la bbdd
+    for (const item of orderItems) {
+      await Product.updateOne(
+        { _id: item.productId },
+        { $inc: { stock: -item.quantity } },
+        { session }
+      );
+    }
+
+    // Crear pedido
+    const [order] = await Order.create(
+      [
+        {
+          customerId,
+          storeId,
+          addressId,
+          items: orderItems,
+          statusDates: {
+            pending: new Date(),
+          },
+        },
+      ],
+      { session }
+    );
+    /*
     const order = await Order.create({
       customerId,
       storeId,
@@ -199,14 +290,16 @@ const createOrder = async (req, res) => {
         pending: new Date(),
       },
     });
-
+*/
     // Crear delivery simulado (dev) para tracking en tiempo real
     // - Origen: dirección hardcoded (almacén)
     // - Destino: addressId del pedido
     try {
       const address = await Address.findById(addressId).lean();
       if (address) {
-        const destinationText = `${address.street}, ${address.postalCode} ${address.city}, ${address.state}, ${address.country || "España"}`;
+        const destinationText = `${address.street}, ${address.postalCode} ${
+          address.city
+        }, ${address.state}, ${address.country || "España"}`;
 
         let origin;
         let destination;
@@ -222,7 +315,9 @@ const createOrder = async (req, res) => {
 
         let route;
         try {
-          route = hasToken() ? await getRoute({ origin, destination }) : interpolateRoute({ origin, destination, steps: 40 });
+          route = hasToken()
+            ? await getRoute({ origin, destination })
+            : interpolateRoute({ origin, destination, steps: 40 });
         } catch (_) {
           route = interpolateRoute({ origin, destination, steps: 40 });
         }
@@ -246,10 +341,115 @@ const createOrder = async (req, res) => {
     }
 
     console.log("✅ Orden creada:", order._id);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Enviar email de confirmación al usuario (fuera de transacción)
+    const { sendOrderConfirmationEmail } = require("../services/emails");
+
+    try {
+      // Obtener los detalles de cada producto
+      const itemsInfo = orderItems.map((item) => {
+        const product = products.find((p) => p._id.equals(item.productId));
+        return {
+          productName: product.title,
+          productImage: product.images[0]?.url || null,
+          quantity: item.quantity,
+          price: item.price,
+        };
+      });
+
+      // Enviar email de confirmación de pedido
+      await sendOrderConfirmationEmail({
+        to: user.email,
+        firstName: user.firstName,
+        storeName,
+        itemsInfo,
+        totalItems,
+        totalPrice,
+        address,
+      });
+    } catch (e) {
+      console.error("⚠️ Email no enviado al usuario:", e.message);
+    }
+
+    // Enviar email de confirmación a la tienda (fuera de transacción)
+    const { sendOrderNotificationToStoreEmail } = require("../services/emails");
+
+    const seller = await User.findById(store.ownerId);
+
+    try {
+      // Obtener los detalles de cada producto
+      const itemsInfo = orderItems.map((item) => {
+        const product = products.find((p) => p._id.equals(item.productId));
+        return {
+          productName: product.title,
+          productImage: product.images[0]?.url || null,
+          quantity: item.quantity,
+          price: item.price,
+        };
+      });
+
+      // Enviar email de confirmación de pedido al vendedor
+      await sendOrderNotificationToStoreEmail({
+        to: seller.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        storeName,
+        itemsInfo,
+        totalItems,
+        totalPrice,
+        address,
+      });
+    } catch (e) {
+      console.error("⚠️ Email no enviado a la tienda:", e.message);
+    }
+
+    // ===============================
+    // Notificación en tiempo real al vendedor cuando se crea la orden
+    // ===============================
+    try {
+      const sellerId = store.ownerId;
+
+      // Guardar notificación en BD
+      const notification = await Notification.create({
+        userId: sellerId,
+        storeId,
+        type: "new_order",
+        entityId: order._id,
+      });
+
+      // Obtener instancia de Socket.IO
+      const io = getIO();
+
+      // Emitir socket si el vendedor está conectado
+      const socketId = getUserSocketId(String(sellerId));
+
+      if (socketId) {
+        io.to(socketId).emit("new_order_notification", {
+          orderId: order._id,
+          storeId,
+          storeName,
+          totalItems,
+          totalPrice,
+          createdAt: order.createdAt,
+        });
+
+        notification.delivered = true;
+        await notification.save();
+      }
+    } catch (e) {
+      console.error("⚠️ Error notificando al vendedor:", e.message);
+    }
+
     res.status(201).json(order);
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
     console.error("❌ Error creando la orden:", err);
-    res.status(500).json({
+    res.status(400).json({
       error: "Error creando la orden",
       message: err.message,
       details: err.errors,
@@ -261,7 +461,7 @@ const isUserAdmin = async ({ userId, order }) => {
   const store = await Store.findById(order.storeId).select("ownerId");
   if (store?.ownerId?.toString() === userId) return true;
   return false;
-}
+};
 
 // Actualizar una orden (ej. status)
 const updateOrder = async (req, res) => {
@@ -270,8 +470,15 @@ const updateOrder = async (req, res) => {
     // Si se está actualizando el status, registrar la fecha
     const updateData = { ...req.body };
 
-    if (!isUserAdmin({ userId: req.user.id, order: await Order.findById(req.params.id) })) {
-      return res.status(403).json({ error: "No tienes permiso para actualizar esta orden" });
+    if (
+      !isUserAdmin({
+        userId: req.user.id,
+        order: await Order.findById(req.params.id),
+      })
+    ) {
+      return res
+        .status(403)
+        .json({ error: "No tienes permiso para actualizar esta orden" });
     }
 
     if (status) {
@@ -279,7 +486,12 @@ const updateOrder = async (req, res) => {
     }
 
     console.log("🔄 updateOrder - Datos a actualizar:", updateData);
-    console.log("🔄 updateOrder - Orden ID:", req.params.id, "Usuario ID:", req.user.id);
+    console.log(
+      "🔄 updateOrder - Orden ID:",
+      req.params.id,
+      "Usuario ID:",
+      req.user.id
+    );
 
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id },
@@ -290,7 +502,9 @@ const updateOrder = async (req, res) => {
     res.json(order);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error actualizando la orden", details: err.message });
+    res
+      .status(500)
+      .json({ error: "Error actualizando la orden", details: err.message });
   }
 };
 

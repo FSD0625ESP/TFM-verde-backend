@@ -6,6 +6,7 @@ const {
   createOrder,
   updateOrder,
   deleteOrder,
+  getAdminOrders,
 } = require("../controllers/orderController");
 const { isAuthenticated } = require("../middlewares/authMiddleware");
 
@@ -13,12 +14,13 @@ const { isAuthenticated } = require("../middlewares/authMiddleware");
 router.use(isAuthenticated);
 
 // Obtener todas las órdenes del usuario
-router.get("/", getOrders);
+router.get("/",isAuthenticated, getOrders);
+router.get("/admin", isAuthenticated, getAdminOrders);
 
 // Obtener una orden específica
 router.get("/:id", isAuthenticated, getOrderById);
 
-// Crear una nueva orden
+// Crear una nueva orden  
 router.post("/", createOrder);
 
 // Actualizar una orden (ej. status)

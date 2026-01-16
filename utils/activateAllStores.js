@@ -28,7 +28,7 @@ const main = async () => {
     };
 
     const update = {
-        $set: { status: 'active' },
+        $set: { active: true },
     };
 
     const result = await Store.updateMany(filter, update);

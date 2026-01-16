@@ -4,6 +4,7 @@ const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
 const { setupSocketIO } = require("./services/socket");
+require("./cron/cleanAbandonedCarts");
 
 // Cargar variables de entorno primero
 require("dotenv").config();

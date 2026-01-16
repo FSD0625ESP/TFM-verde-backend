@@ -6,10 +6,16 @@ const cartSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
-      unique: true, // Un carrito por usuario
+      required: false,
+      unique: false, // Un usuario puede tener múltiples carritos anónimos
+      nullable: true,
     },
-
+    sessionId: {
+      type: String,
+      required: false,
+      unique: true, // Múltiples carritos anónimos permitidos
+      nullable: true,
+    },
     items: [
       {
         productId: {
@@ -45,4 +51,7 @@ cartSchema.methods.calculateTotal = function () {
   }, 0);
 };
 
+cartSchema.index({ updatedAt: 1 });
+cartSchema.index({ deletedAt: 1 });
+cartSchema.index({ userId: 1, updatedAt: 1 });
 module.exports = mongoose.model("Cart", cartSchema);

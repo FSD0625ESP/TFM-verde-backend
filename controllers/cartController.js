@@ -7,12 +7,19 @@ const Product = require("../models/product");
 exports.getCart = async (req, res) => {
   try {
     const userId = req.user?.id;
-    if (!userId)
+    const sessionId = req.query.sessionId || null;
+    if (!userId && !sessionId)
       return res.status(401).json({ message: "Usuario no autenticado" });
 
     console.log("💡 User ID in getCart:", userId);
 
-    const cart = await Cart.findOne({ userId }).populate(
+    // Si hay userId, buscar SOLO por userId (usuarios logueados)
+    // Si NO hay userId, buscar por sessionId (usuarios anónimos)
+    const query = userId
+      ? { userId }
+      : { sessionId, userId: null };
+
+    const cart = await Cart.findOne(query).populate(
       "items.productId",
       "title images price _id storeId"
     );
@@ -32,25 +39,46 @@ exports.getCart = async (req, res) => {
   }
 };
 
+const isPosibleAddToCartProduct = (cart, newProductId) => {
+  // si tienes productos de otra tienda no puedes añadir
+  if (cart.items.length === 0) return true;
+
+  const Product = require("../models/product");
+  const existingProductId = cart.items[0].productId;
+  console.log("🛒 Verificando tienda del producto existente en el carrito:", existingProductId);
+  return Product.findById(existingProductId).then((existingProduct) => {
+    return Product.findById(newProductId).then((newProduct) => {
+      if (!existingProduct || !newProduct) return false;
+      return existingProduct.storeId.toString() === newProduct.storeId.toString();
+    });
+  });
+  return false;
+
+};
+
+
 //
-// 📌 Agregar producto al carrito
+// 📌 Agregar producto al carrito, con user id si esta logueado o session id en caso que no
 //
 exports.addToCart = async (req, res) => {
   try {
-    const { productId, quantity = 1 } = req.body;
+    const { productId, quantity = 1, sessionId = null } = req.body;
     const userId = req.user?.id;
 
-    if (!userId)
+    if (!userId && !sessionId)
       return res.status(401).json({ message: "Usuario no autenticado" });
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
-    let cart = await Cart.findOne({ userId });
+    let cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null });
 
     if (!cart) {
-      cart = new Cart({ userId, items: [] });
+      cart = new Cart({ userId: userId || null, sessionId: sessionId || null, items: [] });
     }
-
+    const canAdd = await isPosibleAddToCartProduct(cart, productId);
+    if (!canAdd) {
+      return res.status(400).json({ message: "No puedes añadir productos de diferentes tiendas al carrito" });
+    }
     const existingItem = cart.items.find(
       (item) => item.productId.toString() === productId
     );
@@ -84,6 +112,8 @@ exports.addToCart = async (req, res) => {
     });
   }
 };
+
+
 
 //
 // 📌 Actualizar cantidad de un producto
@@ -175,7 +205,7 @@ exports.removeItem = async (req, res) => {
       const newQuantity = item.quantity - quantity;
 
       // Si la nueva cantidad es <= 0, eliminar el item completo
-      if (newQuantity < 0) {
+      if (newQuantity <= 0) {
         cart.items.splice(itemIndex, 1);
         console.log("🗑️ Item eliminado (cantidad sería <= 0)");
       } else {
@@ -239,6 +269,75 @@ exports.clearCart = async (req, res) => {
     res.status(500).json({
       message: "Error al vaciar carrito",
       error: err,
+    });
+  }
+};
+
+//
+// 📌 Reemplazar carrito anónimo por carrito de usuario al hacer login
+//
+exports.replaceAnonymousCart = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { sessionId } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
+    console.log("🔄 Reemplazando carrito anónimo por carrito de usuario", { userId, sessionId });
+
+    // 1. Obtener carrito anónimo ANTES de eliminarlo
+    let anonymousCart = null;
+    if (sessionId) {
+      anonymousCart = await Cart.findOne({ sessionId, userId: null });
+      console.log("📦 Carrito anónimo encontrado:", anonymousCart?.items.length || 0, "items");
+    }
+
+    // 2. Buscar o crear carrito del usuario
+    let userCart = await Cart.findOne({ userId });
+
+    if (!userCart) {
+      // Crear carrito con los items del anónimo (si existen)
+      userCart = new Cart({
+        userId,
+        sessionId: null,
+        items: anonymousCart?.items || [],
+        total: anonymousCart?.total || 0
+      });
+      await userCart.save();
+      console.log("✨ Carrito de usuario creado con", userCart.items.length, "items del anónimo");
+    } else {
+      // Usuario ya tenía carrito → transferir items del anónimo si existen
+      if (anonymousCart && anonymousCart.items.length > 0) {
+        userCart.items = anonymousCart.items;
+        userCart.total = anonymousCart.total;
+        await userCart.save();
+        console.log("🔄 Items del carrito anónimo transferidos al carrito del usuario:", userCart.items.length, "items");
+      } else {
+        console.log("👤 Usuario ya tenía carrito con", userCart.items.length, "items → se mantiene");
+      }
+    }
+
+    // 3. Eliminar carrito anónimo después de transferir items
+    if (sessionId && anonymousCart) {
+      await Cart.deleteOne({ sessionId, userId: null });
+      console.log("🗑️ Carrito anónimo eliminado");
+    }
+
+    // 4. Retornar carrito del usuario con populate
+    userCart = await Cart.findOne({ userId }).populate(
+      "items.productId",
+      "title images price _id storeId"
+    );
+
+    console.log("✅ Carrito de usuario cargado:", userCart.items.length, "items");
+    res.json(userCart);
+  } catch (err) {
+    console.error("❌ Error reemplazando carrito:", err);
+    res.status(500).json({
+      message: "Error al reemplazar carrito",
+      error: err.message
     });
   }
 };

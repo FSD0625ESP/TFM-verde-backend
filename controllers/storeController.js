@@ -142,8 +142,8 @@ const searchStoresFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     // convert to ObjectId instances if possible
     const catObjectIds = cats
@@ -316,6 +316,12 @@ const updateStoreAppearance = async (req, res) => {
     res.status(500).json({ msg: error.message });
   }
 };
+
+
+const getActiveStoresIds = async () => {
+  const stores = await Store.find({ active: true }).select("_id");
+  return stores.map((s) => s._id);
+}
 
 /* POST - /stores/:storeId/image
    Upload store featured image or logo
@@ -571,4 +577,5 @@ module.exports = {
   getOfferProducts,
   toggleProductFeatured,
   toggleProductOffer,
+  getActiveStoresIds,
 };

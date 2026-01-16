@@ -159,6 +159,7 @@ const createSeeds = async () => {
         logo: logoDataUri,
         image: `https://picsum.photos/1600/900?random=${i}`,
         categories: chosenCategoryIds,
+        status: "active",
         billingInfo: {
           name: `${sellers[i].firstName} ${sellers[i].lastName}`,
           address: `Calle Principal ${i + 1}, 08001 Barcelona`,
@@ -196,24 +197,22 @@ const createSeeds = async () => {
         // Asignar a cada producto una categoría aleatoria perteneciente a la tienda
         const productCategory =
           chosenCategoryIds[
-            Math.floor(Math.random() * chosenCategoryIds.length)
+          Math.floor(Math.random() * chosenCategoryIds.length)
           ];
 
         await Product.create({
           storeId: store._id,
           title: `${productTypes[j]} ${i + 1}`,
           slug: generateSlug(`${productTypes[j]} ${i + 1}`),
-          description: `Hermoso ${productTypes[j].toLowerCase()} artesanal de ${
-            storeNames[i]
-          }`,
+          description: `Hermoso ${productTypes[j].toLowerCase()} artesanal de ${storeNames[i]
+            }`,
           longDescription: `Este ${productTypes[
             j
-          ].toLowerCase()} es una pieza única hecha a mano en nuestra tienda ${
-            storeNames[i]
-          }. Perfecto para quienes aprecian la calidad y el diseño exclusivo. 
+          ].toLowerCase()} es una pieza única hecha a mano en nuestra tienda ${storeNames[i]
+            }. Perfecto para quienes aprecian la calidad y el diseño exclusivo. 
           Ideal para cualquier ocasión, este ${productTypes[
-            j
-          ].toLowerCase()} combina estilo y artesanía en cada detalle.`,
+              j
+            ].toLowerCase()} combina estilo y artesanía en cada detalle.`,
           price: Math.floor(Math.random() * 150) + 20,
           images: [
             {
@@ -240,9 +239,8 @@ const createSeeds = async () => {
           storeId: store._id,
           userId: customers[i]._id,
           rating: rating,
-          comment: `Comentario ${j + 1} para la tienda ${
-            store.name
-          }. Rating: ${rating}`,
+          comment: `Comentario ${j + 1} para la tienda ${store.name
+            }. Rating: ${rating}`,
         });
       }
 
@@ -256,9 +254,8 @@ const createSeeds = async () => {
             productId: product._id,
             userId: customers[i]._id,
             rating: rating,
-            comment: `Comentario ${j + 1} para el producto ${
-              product.title
-            } de la tienda ${store.name}. Rating: ${rating}`,
+            comment: `Comentario ${j + 1} para el producto ${product.title
+              } de la tienda ${store.name}. Rating: ${rating}`,
           });
         }
       }

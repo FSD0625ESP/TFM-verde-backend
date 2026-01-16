@@ -131,10 +131,8 @@ const getAdminOrders = async (req, res) => {
 // Obtener una orden por ID
 const getOrderById = async (req, res) => {
   try {
-    const order = await Order.findOne({
-      _id: req.params.id,
-      customerId: req.user._id,
-    })
+    console.log("🔍 getOrderById - User ID (string):", req.user.id);
+    const order = await Order.findById(req.params.id)
       .populate("items.productId")
       .populate("addressId");
 

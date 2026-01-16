@@ -285,11 +285,105 @@ const setupSocketIO = (io) => {
 
     /* FIN control de usuarios que están viendo un producto */
 
+    // Usuario se une a una orden (para recibir actualizaciones en tiempo real)
+    socket.on("join_order", async ({ orderId }) => {
+      const hasAccess = await canAccessOrder({ userId: socket.userId, orderId });
+      if (!hasAccess) {
+        socket.emit("error", { message: "No tienes acceso a esta orden" });
+        return;
+      }
+      socket.join(`order:${orderId}`);
+    });
+
+    // Usuario se une a un delivery (para recibir actualizaciones de posición en tiempo real)
+    socket.on("join_delivery", async ({ deliveryId }) => {
+      if (!deliveryId) return;
+
+      try {
+        const Delivery = require("../models/delivery");
+        const delivery = await Delivery.findById(deliveryId).select("orderId").lean();
+
+        if (!delivery?.orderId) {
+          socket.emit("error", { message: "Delivery no encontrado" });
+          return;
+        }
+
+        // Verificar acceso a través de la orden
+        const hasAccess = await canAccessOrder({ userId: socket.userId, orderId: delivery.orderId.toString() });
+        if (!hasAccess) {
+          socket.emit("error", { message: "No tienes acceso a este delivery" });
+          return;
+        }
+
+        socket.join(`delivery:${deliveryId}`);
+      } catch (error) {
+        console.error("Error al unirse a delivery:", error);
+        socket.emit("error", { message: "Error al unirse al delivery" });
+      }
+    });
+
+    // Iniciar envío de una orden (cambiar estado a shipped)
+    socket.on("start_order_shipping", async ({ orderId }) => {
+      try {
+        const Order = require("../models/order");
+        const Delivery = require("../models/delivery");
+        const { startDeliverySimulation } = require("./deliverySimulation");
+
+        const hasAccess = await canAccessOrder({ userId: socket.userId, orderId });
+
+        if (!hasAccess) {
+          socket.emit("error", { message: "No tienes acceso a esta orden" });
+          return;
+        }
+
+        const order = await Order.findById(orderId);
+        if (!order) {
+          socket.emit("error", { message: "Orden no encontrada" });
+          return;
+        }
+
+        if (order.status !== "pending") {
+          socket.emit("error", { message: "La orden no está en estado pendiente" });
+          return;
+        }
+
+        // Actualizar estado a shipped
+        order.status = "shipped";
+        order.statusDates.shipped = new Date();
+        await order.save();
+
+        // Emitir actualización a todos los usuarios en la sala de la orden
+        io.to(`order:${orderId}`).emit("order_update", {
+          orderId,
+          status: "shipped",
+          statusDates: order.statusDates
+        });
+
+        // Buscar el delivery asociado e iniciar la simulación
+        const delivery = await Delivery.findOne({ orderId }).select("_id");
+        if (delivery) {
+          console.log(`🚚 Iniciando simulación de delivery ${delivery._id} para orden ${orderId}`);
+          startDeliverySimulation({
+            io,
+            deliveryId: delivery._id,
+            orderId,
+            tickMs: 2000
+          });
+        }
+      } catch (error) {
+        console.error("Error al iniciar envío:", error);
+        socket.emit("error", { message: "Error al actualizar el estado de la orden" });
+      }
+    });
+
     // Desconexión
     socket.on("disconnect", () => {
-      connectedUsers.delete(socket.userId);
-      io.emit("user_offline", { userId: socket.userId });
+      removeConnectedSocket(socket.userId, socket.id);
+      if (!connectedUsers.has(socket.userId)) {
+        io.emit("user_offline", { userId: socket.userId });
+      }
 
+      // Limpiar del mapa de product viewers
       const productId = socket.data.currentProduct;
       if (productId) {
         const usersMap = productViewers.get(productId);
@@ -302,13 +396,6 @@ const setupSocketIO = (io) => {
               usersMap.delete(socket.userId);
             }
 
-            // Desconexión
-            socket.on("disconnect", () => {
-              removeConnectedSocket(socket.userId, socket.id);
-              if (!connectedUsers.has(socket.userId)) {
-                io.emit("user_offline", { userId: socket.userId });
-              }
-            });
             if (usersMap.size === 0) {
               productViewers.delete(productId);
             }
@@ -320,9 +407,8 @@ const setupSocketIO = (io) => {
           }
         }
       }
-      /* FIN control de usuarios que están viendo un producto */
     });
-  })
+  });
 };
 
 

@@ -37,6 +37,8 @@ const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
 const deliveryRoutes = require("./routes/deliveries");
 const analyticsRoutes = require("./routes/analytics");
+const reportRoutes = require("./routes/reports");
+const adminRoutes = require("./routes/admin");
 const mongoose = require("mongoose");
 
 
@@ -78,6 +80,8 @@ app.use("/uploads", uploadRoutes);
 app.use("/orders", orderRoutes);
 app.use("/deliveries", deliveryRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/reports", reportRoutes);
+app.use("/admin", adminRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

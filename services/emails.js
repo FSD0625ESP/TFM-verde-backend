@@ -123,8 +123,26 @@ const sendContactEmail = async ({ nombre, email, mensaje }) => {
     });
 };
 
+const sendStoreReportEmail = async ({ storeName, storeId, reason, description, reporterEmail, reporterName }) => {
+    const templateData = {
+        EMAIL_BODY_CONTENT: `
+            <h2>Nuevo reporte de tienda</h2>
+            <p>Se ha recibido un nuevo reporte para la tienda <strong>${storeName}</strong> (ID: ${storeId}).</p>
+            <p><strong>Motivo del reporte:</strong> ${reason}</p>
+            <p><strong>Descripción adicional:</strong> ${description || 'N/A'}</p>
+            <p><strong>Reportado por:</strong> ${reporterName} (${reporterEmail})</p>
+        `
+    };
+    return sendEmail({
+        to: process.env.ADMIN_EMAIL || process.env.EMAIL_USER,
+        subject: 'Nuevo reporte de tienda - Meraki Marketplace',
+        templateData
+    });
+};
+
 module.exports = {
     sendEmail,
     sendPasswordResetEmail,
-    sendContactEmail
+    sendContactEmail,
+    sendStoreReportEmail
 };

@@ -14,14 +14,14 @@ const { isAuthenticated } = require("../middlewares/authMiddleware");
 router.use(isAuthenticated);
 
 // Obtener todas las órdenes del usuario
-router.get("/",isAuthenticated, getOrders);
+router.get("/", isAuthenticated, getOrders);
 router.get("/admin", isAuthenticated, getAdminOrders);
 
 // Obtener una orden específica
 router.get("/:id", isAuthenticated, getOrderById);
 
-// Crear una nueva orden  
-router.post("/", createOrder);
+// Crear una nueva orden
+router.post("/", isAuthenticated, createOrder);
 
 // Actualizar una orden (ej. status)
 router.patch("/:id", updateOrder);

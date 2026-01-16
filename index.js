@@ -22,8 +22,6 @@ app.use(
   })
 );
 
-
-
 // Importar rutas
 const userRoutes = require("./routes/users");
 const addressRoutes = require("./routes/addresses");
@@ -39,6 +37,7 @@ const deliveryRoutes = require("./routes/deliveries");
 const analyticsRoutes = require("./routes/analytics");
 const reportRoutes = require("./routes/reports");
 const adminRoutes = require("./routes/admin");
+const notificationRoutes = require("./routes/notifications");
 const mongoose = require("mongoose");
 
 
@@ -82,6 +81,7 @@ app.use("/deliveries", deliveryRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/reports", reportRoutes);
 app.use("/admin", adminRoutes);
+app.use("/notifications", notificationRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

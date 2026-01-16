@@ -1,8 +1,19 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 
-// Mapa para rastrear usuarios conectados (soporta múltiples pestañas/sockets por usuario)
-// userId -> Set<socketId>
+let ioInstance = null;
+
+/**
+ * productId => {
+ *   authUsers: Map<userId, Set<socketId>>,
+ *   anonSockets: Set<socketId>
+ * }
+ */
+const productViewers = new Map();
+
+/**
+ * userId -> Set<socketId>
+ */
 const connectedUsers = new Map();
 
 const addConnectedSocket = (userId, socketId) => {
@@ -13,49 +24,26 @@ const addConnectedSocket = (userId, socketId) => {
 };
 
 const removeConnectedSocket = (userId, socketId) => {
-  const socketIds = connectedUsers.get(userId);
-  if (!socketIds) return;
-  socketIds.delete(socketId);
-  if (socketIds.size === 0) {
+  const sockets = connectedUsers.get(userId);
+  if (!sockets) return;
+  sockets.delete(socketId);
+  if (sockets.size === 0) {
     connectedUsers.delete(userId);
   }
 };
 
+const getUserSocketId = (userId) => connectedUsers.get(userId) || new Set();
 
 const emitToUser = (io, userId, event, payload) => {
-  const socketIds = getUserSocketId(userId);
-  socketIds.forEach((socketId) => io.to(socketId).emit(event, payload));
-};
-
-const canAccessOrder = async ({ userId, orderId }) => {
-  const Order = require("../models/order");
-  const Store = require("../models/store");
-
-  if (!orderId) return false;
-
-  const order = await Order.findById(orderId).select("customerId storeId");
-  if (!order) return false;
-
-  if (order.customerId?.toString() === userId) return true;
-
-  const store = await Store.findById(order.storeId).select("ownerId");
-  if (store?.ownerId?.toString() === userId) return true;
-
-  return false;
+  getUserSocketId(userId).forEach((sid) => io.to(sid).emit(event, payload));
 };
 
 const getUserChatIds = async (userId) => {
   const Chat = require("../models/chat");
-
-  // Ideal: query por ownerId/userId (sin resolver Store). Fallback legacy: si hay chats sin ownerId,
-  // el join se completará cuando el cliente abra el dropdown (join_chats) o tras backfill.
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
   const chats = await Chat.find({
-    $or: [
-      { userId: userObjectId },
-      { ownerId: userObjectId },
-    ],
+    $or: [{ userId: userObjectId }, { ownerId: userObjectId }],
     deletedAt: null,
   }).select("_id");
 
@@ -64,213 +52,157 @@ const getUserChatIds = async (userId) => {
 
 const computeUnreadTotalForUser = async (userId) => {
   const Chat = require("../models/chat");
-
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
-  const customerAgg = await Chat.aggregate([
-    { $match: { userId: userObjectId, deletedAt: null } },
-    { $group: { _id: null, total: { $sum: { $ifNull: ["$customerUnreadCount", 0] } } } },
+  const [customerAgg, ownerAgg] = await Promise.all([
+    Chat.aggregate([
+      { $match: { userId: userObjectId, deletedAt: null } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ["$customerUnreadCount", 0] } },
+        },
+      },
+    ]),
+    Chat.aggregate([
+      { $match: { ownerId: userObjectId, deletedAt: null } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ["$ownerUnreadCount", 0] } },
+        },
+      },
+    ]),
   ]);
 
-  const ownerAgg = await Chat.aggregate([
-    { $match: { ownerId: userObjectId, deletedAt: null } },
-    { $group: { _id: null, total: { $sum: { $ifNull: ["$ownerUnreadCount", 0] } } } },
-  ]);
-
-  return (customerAgg?.[0]?.total || 0) + (ownerAgg?.[0]?.total || 0);
+  return (customerAgg[0]?.total || 0) + (ownerAgg[0]?.total || 0);
 };
 
 const emitUnreadCountToUser = async (io, userId) => {
   try {
     const total = await computeUnreadTotalForUser(userId);
     emitToUser(io, userId, "unread_messages_count", total);
-  } catch (_) {
-    // noop
-  }
+  } catch { }
 };
-const productViewers = new Map();
-/**
- * Configura Socket.IO con autenticación y event handlers
- * @param {Server} io - Instancia de Socket.IO
- */
+
 const setupSocketIO = (io) => {
-  // Middleware para autenticar sockets
+  ioInstance = io;
+
+  /**
+   * Middleware permisivo:
+   * - Soporta sockets anónimos
+   * - Autenticación solo si hay token válido
+   */
   io.use((socket, next) => {
-    // Leer el token desde las cookies HTTP (enviadas automáticamente con withCredentials)
     const cookies = socket.handshake.headers.cookie;
+    let token = null;
 
-    if (!cookies) {
-      return next(new Error("Error de autenticación: no se proporcionaron cookies"));
+    if (cookies) {
+      const row = cookies.split("; ").find((r) => r.startsWith("token="));
+      if (row) token = row.split("=")[1];
     }
 
-    // Parsear las cookies para obtener el token
-    const tokenCookie = cookies
-      .split("; ")
-      .find((row) => row.startsWith("token="));
-
-    if (!tokenCookie) {
-      return next(new Error("Error de autenticación: no hay token en las cookies"));
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = decoded.id;
+        socket.userEmail = decoded.email;
+        socket.isAuthenticated = true;
+      } catch {
+        socket.isAuthenticated = false;
+      }
+    } else {
+      socket.isAuthenticated = false;
     }
 
-    const token = tokenCookie.split("=")[1];
-
-    if (!token) {
-      return next(new Error("Error de autenticación: token vacío"));
-    }
-
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded.id;
-      socket.userEmail = decoded.email;
-      next();
-    } catch (error) {
-      next(new Error("Error de autenticación: token inválido"));
-    }
+    next();
   });
 
   io.on("connection", (socket) => {
-
-    // Registrar usuario conectado (multi-tab)
-    addConnectedSocket(socket.userId, socket.id);
-    // Notificar presencia
-    if (connectedUsers.get(socket.userId)?.size === 1) {
-      io.emit("user_online", { userId: socket.userId });
+    /** PRESENCIA */
+    if (socket.isAuthenticated) {
+      addConnectedSocket(socket.userId, socket.id);
+      if (connectedUsers.get(socket.userId)?.size === 1) {
+        io.emit("user_online", { userId: socket.userId });
+      }
     }
 
-    const joinMyChats = async () => {
-      const chatIds = await getUserChatIds(socket.userId);
-      chatIds.forEach((chatId) => socket.join(`chat:${chatId}`));
-      await emitUnreadCountToUser(io, socket.userId);
-    };
+    /** AUTO JOIN CHATS */
+    if (socket.isAuthenticated) {
+      const joinMyChats = async () => {
+        const chatIds = await getUserChatIds(socket.userId);
+        chatIds.forEach((id) => socket.join(`chat:${id}`));
+        await emitUnreadCountToUser(io, socket.userId);
+      };
 
-    // Auto-join al conectar para recibir mensajes aunque el dropdown/chat no se abra
-    joinMyChats().catch(() => { /* noop */ });
+      joinMyChats().catch(() => { });
+      socket.on("join_my_chats", joinMyChats);
+    }
 
-    // Permite reintentar/forzar join desde el cliente
-    socket.on("join_my_chats", async () => {
-      await joinMyChats();
+    socket.on("join_chats", (chatIds = []) => {
+      chatIds.forEach((id) => socket.join(`chat:${id}`));
+      if (socket.isAuthenticated) {
+        emitUnreadCountToUser(io, socket.userId);
+      }
     });
 
-    // Usuario se une a sus salas de chat
-    socket.on("join_chats", (chatIds) => {
-      chatIds.forEach((chatId) => {
-        socket.join(`chat:${chatId}`);
-      });
-      emitUnreadCountToUser(io, socket.userId);
-    });
-
-
-    // Usuario está escribiendo
-    socket.on("typing", (data) => {
-      const { chatId } = data;
+    socket.on("typing", ({ chatId }) => {
       socket.to(`chat:${chatId}`).emit("user_typing", {
         chatId,
         userId: socket.userId,
         userEmail: socket.userEmail,
       });
-
     });
 
-
-
-    // Marcar mensajes como leídos
-    socket.on("mark_as_read", async ({ chatId }) => {
-      try {
-        const Chat = require("../models/chat");
-        const Store = require("../models/store");
-        const chat = await Chat.findById(chatId);
-        if (!chat) return;
-        const store = await Store.findById(chat.storeId);
-        const now = new Date();
-        if (chat.userId.toString() === socket.userId) {
-          chat.customerLastReadAt = now;
-          chat.customerUnreadCount = 0;
-        } else if (store?.ownerId?.toString() === socket.userId) {
-          chat.ownerLastReadAt = now;
-          chat.ownerUnreadCount = 0;
-          if (!chat.ownerId) {
-            chat.ownerId = store.ownerId;
-          }
-        }
-        await chat.save();
-        socket.to(`chat:${chatId}`).emit("messages_read", {
-          chatId,
-          userId: socket.userId,
-          at: now,
-        });
-
-        await emitUnreadCountToUser(io, socket.userId);
-      } catch (_) {
-        // noop
-        io.to(room).emit("product_viewers_update", {
-          productId,
-          count: productViewers.get(productId).size,
-        });
-      };
-    });
-
-    socket.on("leave_product", ({ productId }) => {
-      const viewers = productViewers.get(productId);
-      if (!viewers) return;
-
-      viewers.delete(socket.id);
-      socket.leave(`product:${productId}`);
-
-      if (viewers.size === 0) {
-        productViewers.delete(productId);
-      }
-
-      io.to(`product:${productId}`).emit("product_viewers_update", {
-        productId,
-        count: viewers.size,
-      });
-
-      socket.data.currentProduct = null;
-    });
-
-    socket.on("join_product", async ({ productId, storeOwnerId }) => {
-      console.log("Joining product:", productId);
+    /** PRODUCT VIEWERS */
+    socket.on("join_product", ({ productId, storeOwnerId }) => {
       if (!productId) return;
-      // ⛔ excluir al owner
-      if (storeOwnerId && socket.userId === storeOwnerId) return;
+      if (socket.isAuthenticated && socket.userId === storeOwnerId) return;
 
       const room = `product:${productId}`;
       socket.join(room);
 
       if (!productViewers.has(productId)) {
-        productViewers.set(productId, new Map());
+        productViewers.set(productId, {
+          authUsers: new Map(),
+          anonSockets: new Set(),
+        });
       }
 
-      const usersMap = productViewers.get(productId);
+      const entry = productViewers.get(productId);
 
-      if (!usersMap.has(socket.userId)) {
-        usersMap.set(socket.userId, new Set());
+      if (socket.isAuthenticated) {
+        if (!entry.authUsers.has(socket.userId)) {
+          entry.authUsers.set(socket.userId, new Set());
+        }
+        entry.authUsers.get(socket.userId).add(socket.id);
+      } else {
+        entry.anonSockets.add(socket.id);
       }
-
-      usersMap.get(socket.userId).add(socket.id);
 
       socket.data.currentProduct = productId;
 
       io.to(room).emit("product_viewers_update", {
         productId,
-        count: usersMap.size, // 👈 usuarios únicos
+        count: entry.authUsers.size + entry.anonSockets.size,
       });
     });
 
     socket.on("leave_product", ({ productId }) => {
-      const usersMap = productViewers.get(productId);
-      if (!usersMap) return;
+      const entry = productViewers.get(productId);
+      if (!entry) return;
 
-      const userSockets = usersMap.get(socket.userId);
-      if (!userSockets) return;
-
-      userSockets.delete(socket.id);
-
-      if (userSockets.size === 0) {
-        usersMap.delete(socket.userId);
+      if (socket.isAuthenticated) {
+        const set = entry.authUsers.get(socket.userId);
+        if (set) {
+          set.delete(socket.id);
+          if (set.size === 0) entry.authUsers.delete(socket.userId);
+        }
+      } else {
+        entry.anonSockets.delete(socket.id);
       }
 
-      if (usersMap.size === 0) {
+      if (!entry.authUsers.size && !entry.anonSockets.size) {
         productViewers.delete(productId);
       }
 
@@ -279,7 +211,7 @@ const setupSocketIO = (io) => {
 
       io.to(`product:${productId}`).emit("product_viewers_update", {
         productId,
-        count: usersMap.size,
+        count: entry.authUsers.size + entry.anonSockets.size,
       });
     });
 
@@ -376,62 +308,53 @@ const setupSocketIO = (io) => {
       }
     });
 
-    // Desconexión
+    /** DISCONNECT */
     socket.on("disconnect", () => {
-      removeConnectedSocket(socket.userId, socket.id);
-      if (!connectedUsers.has(socket.userId)) {
-        io.emit("user_offline", { userId: socket.userId });
-      }
-
-      // Limpiar del mapa de product viewers
-      const productId = socket.data.currentProduct;
-      if (productId) {
-        const usersMap = productViewers.get(productId);
-        if (usersMap) {
-          const userSockets = usersMap.get(socket.userId);
-          if (userSockets) {
-            userSockets.delete(socket.id);
-
-            if (userSockets.size === 0) {
-              usersMap.delete(socket.userId);
-            }
-
-            if (usersMap.size === 0) {
-              productViewers.delete(productId);
-            }
-
-            io.to(`product:${productId}`).emit("product_viewers_update", {
-              productId,
-              count: usersMap.size,
-            });
-          }
+      if (socket.isAuthenticated) {
+        removeConnectedSocket(socket.userId, socket.id);
+        if (!connectedUsers.has(socket.userId)) {
+          io.emit("user_offline", { userId: socket.userId });
         }
       }
+
+      const productId = socket.data.currentProduct;
+      if (!productId) return;
+
+      const entry = productViewers.get(productId);
+      if (!entry) return;
+
+      if (socket.isAuthenticated) {
+        const set = entry.authUsers.get(socket.userId);
+        if (set) {
+          set.delete(socket.id);
+          if (set.size === 0) entry.authUsers.delete(socket.userId);
+        }
+      } else {
+        entry.anonSockets.delete(socket.id);
+      }
+
+      if (!entry.authUsers.size && !entry.anonSockets.size) {
+        productViewers.delete(productId);
+      }
+
+      io.to(`product:${productId}`).emit("product_viewers_update", {
+        productId,
+        count: entry.authUsers.size + entry.anonSockets.size,
+      });
     });
   });
 };
 
-
-/**
- * Obtiene el socket ID de un usuario conectado
- * @param {string} userId - ID del usuario
- * @returns {string|undefined} Socket ID del usuario
- */
-const getUserSocketId = (userId) => {
-  return connectedUsers.get(userId);
+const getIO = () => {
+  if (!ioInstance) throw new Error("Socket.IO no inicializado");
+  return ioInstance;
 };
 
-/**
- * Verifica si un usuario está conectado
- * @param {string} userId - ID del usuario
- * @returns {boolean}
- */
-const isUserConnected = (userId) => {
-  return connectedUsers.has(userId);
-};
+const isUserConnected = (userId) => connectedUsers.has(userId);
 
 module.exports = {
   setupSocketIO,
+  getIO,
   getUserSocketId,
   isUserConnected,
   connectedUsers,

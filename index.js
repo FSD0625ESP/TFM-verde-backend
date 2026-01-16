@@ -21,8 +21,6 @@ app.use(
   })
 );
 
-
-
 // Importar rutas
 const userRoutes = require("./routes/users");
 const addressRoutes = require("./routes/addresses");
@@ -35,6 +33,7 @@ const uploadRoutes = require("./routes/uploads");
 const cartRoutes = require("./routes/cart");
 const orderRoutes = require("./routes/order");
 const analyticsRoutes = require("./routes/analytics");
+const notificationRoutes = require("./routes/notifications");
 const mongoose = require("mongoose");
 require("dotenv").config();
 
@@ -78,6 +77,7 @@ app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
 app.use("/orders", orderRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/notifications", notificationRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

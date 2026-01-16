@@ -1,10 +1,16 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 
+let ioInstance = null;
+
 // Mapa para rastrear usuarios conectados
 const connectedUsers = new Map();
 
 // productId => Set(socket.id) mapa de usuarios que están viendo el producto
+// productId => {
+//   authUsers: Map(userId => Set(socketId))
+//   anonSockets: Set(socketId)
+// }
 const productViewers = new Map();
 
 /**
@@ -12,45 +18,51 @@ const productViewers = new Map();
  * @param {Server} io - Instancia de Socket.IO
  */
 const setupSocketIO = (io) => {
+  // Guardar instancia de Socket.IO
+  ioInstance = io;
+
   // Middleware para autenticar sockets
   io.use((socket, next) => {
     // Leer el token desde las cookies HTTP (enviadas automáticamente con withCredentials)
     const cookies = socket.handshake.headers.cookie;
 
-    if (!cookies) {
-      return next(new Error("Authentication error: No cookies provided"));
+    // Sin autenticación, sockets anónimos existen, pero no pueden enviar mensajes válidos
+    // Los chats siguen funcionando porque verifican permisos en el backend
+    let token = null;
+
+    if (cookies) {
+      const tokenCookie = cookies
+        .split("; ")
+        .find((row) => row.startsWith("token="));
+
+      if (tokenCookie) {
+        token = tokenCookie.split("=")[1];
+      }
     }
 
-    // Parsear las cookies para obtener el token
-    const tokenCookie = cookies
-      .split("; ")
-      .find((row) => row.startsWith("token="));
-
-    if (!tokenCookie) {
-      return next(new Error("Authentication error: No token in cookies"));
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = decoded.id;
+        socket.userEmail = decoded.email;
+        socket.isAuthenticated = true;
+      } catch {
+        socket.isAuthenticated = false;
+      }
+    } else {
+      socket.isAuthenticated = false;
     }
 
-    const token = tokenCookie.split("=")[1];
-
-    if (!token) {
-      return next(new Error("Authentication error: Empty token"));
-    }
-
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded.id;
-      socket.userEmail = decoded.email;
-      next();
-    } catch (error) {
-      next(new Error("Authentication error: Invalid token"));
-    }
+    next(); // 👈 SIEMPRE dejamos pasar
   });
 
   io.on("connection", (socket) => {
-    // Registrar usuario conectado
-    connectedUsers.set(socket.userId, socket.id);
-    // Notificar presencia
-    io.emit("user_online", { userId: socket.userId });
+    if (socket.isAuthenticated) {
+      // Registrar usuario conectado
+      connectedUsers.set(socket.userId, socket.id);
+      // Notificar presencia
+      io.emit("user_online", { userId: socket.userId });
+    }
 
     // Usuario se une a sus salas de chat
     socket.on("join_chats", (chatIds) => {
@@ -118,97 +130,88 @@ const setupSocketIO = (io) => {
     });
 
     /* INICIO control de usuarios que están viendo un producto */
-    /*
-    socket.on("join_product", ({ productId }) => {
-      if (!productId) return;
-
-      const room = `product:${productId}`;
-      socket.join(room);
-
-      if (!productViewers.has(productId)) {
-        productViewers.set(productId, new Set());
-      }
-
-      productViewers.get(productId).add(socket.id);
-      socket.data.currentProduct = productId;
-
-      io.to(room).emit("product_viewers_update", {
-        productId,
-        count: productViewers.get(productId).size,
-      });
-    });
-
-    socket.on("leave_product", ({ productId }) => {
-      const viewers = productViewers.get(productId);
-      if (!viewers) return;
-
-      viewers.delete(socket.id);
-      socket.leave(`product:${productId}`);
-
-      if (viewers.size === 0) {
-        productViewers.delete(productId);
-      }
-
-      io.to(`product:${productId}`).emit("product_viewers_update", {
-        productId,
-        count: viewers.size,
-      });
-
-      socket.data.currentProduct = null;
-    });
-    */
     socket.on("join_product", async ({ productId, storeOwnerId }) => {
       if (!productId) return;
 
-      // ⛔ excluir al owner
-      if (storeOwnerId && socket.userId === storeOwnerId) return;
+      // excluir owner (solo si está autenticado)
+      if (socket.isAuthenticated && socket.userId === storeOwnerId) return;
 
       const room = `product:${productId}`;
       socket.join(room);
 
       if (!productViewers.has(productId)) {
-        productViewers.set(productId, new Map());
+        productViewers.set(productId, {
+          authUsers: new Map(),
+          anonSockets: new Set(),
+        });
       }
 
-      const usersMap = productViewers.get(productId);
+      // Actualizar el mapa de viewers
+      const entry = productViewers.get(productId);
 
-      if (!usersMap.has(socket.userId)) {
-        usersMap.set(socket.userId, new Set());
+      if (socket.isAuthenticated) {
+        if (!entry.authUsers.has(socket.userId)) {
+          entry.authUsers.set(socket.userId, new Set());
+        }
+        entry.authUsers.get(socket.userId).add(socket.id);
+      } else {
+        entry.anonSockets.add(socket.id);
       }
-
-      usersMap.get(socket.userId).add(socket.id);
 
       socket.data.currentProduct = productId;
 
+      const count = entry.authUsers.size + entry.anonSockets.size; // usuarios únicos
+
       io.to(room).emit("product_viewers_update", {
         productId,
-        count: usersMap.size, // 👈 usuarios únicos
+        count,
+      });
+
+      console.log("👀 JOIN_PRODUCT", {
+        productId,
+        isAuth: socket.isAuthenticated,
+        userId: socket.userId,
+        anonCount: entry.anonSockets.size,
+        authCount: entry.authUsers.size,
       });
     });
 
     socket.on("leave_product", ({ productId }) => {
-      const usersMap = productViewers.get(productId);
-      if (!usersMap) return;
+      if (!productId) return;
 
-      const userSockets = usersMap.get(socket.userId);
-      if (!userSockets) return;
+      const entry = productViewers.get(productId);
+      if (!entry) return;
 
-      userSockets.delete(socket.id);
+      if (socket.isAuthenticated) {
+        // Usuario autenticado
+        const userSockets = entry.authUsers.get(socket.userId);
+        if (userSockets) {
+          userSockets.delete(socket.id);
 
-      if (userSockets.size === 0) {
-        usersMap.delete(socket.userId);
+          // si el usuario ya no tiene sockets activos en este producto
+          if (userSockets.size === 0) {
+            entry.authUsers.delete(socket.userId);
+          }
+        }
+      } else {
+        // Usuario anónimo
+        entry.anonSockets.delete(socket.id);
       }
 
-      if (usersMap.size === 0) {
+      // limpiar si el producto se queda vacío
+      if (entry.authUsers.size === 0 && entry.anonSockets.size === 0) {
         productViewers.delete(productId);
       }
 
       socket.leave(`product:${productId}`);
       socket.data.currentProduct = null;
 
+      const count =
+        (entry.authUsers?.size || 0) + (entry.anonSockets?.size || 0);
+
       io.to(`product:${productId}`).emit("product_viewers_update", {
         productId,
-        count: usersMap.size,
+        count,
       });
     });
 
@@ -220,47 +223,38 @@ const setupSocketIO = (io) => {
       io.emit("user_offline", { userId: socket.userId });
 
       /* INICIO control de usuarios que están viendo un producto */
-      /*
       const productId = socket.data.currentProduct;
-      if (productId) {
-        const viewers = productViewers.get(productId);
-        if (viewers) {
-          viewers.delete(socket.id);
+      if (!productId) return;
 
-          if (viewers.size === 0) {
-            productViewers.delete(productId);
-          }
+      const entry = productViewers.get(productId);
+      if (!entry) return;
 
-          io.to(`product:${productId}`).emit("product_viewers_update", {
-            productId,
-            count: viewers.size,
-          });
-        }
-      }
-        */
-      const productId = socket.data.currentProduct;
-      if (productId) {
-        const usersMap = productViewers.get(productId);
-        if (usersMap) {
-          const userSockets = usersMap.get(socket.userId);
-          if (userSockets) {
-            userSockets.delete(socket.id);
+      if (socket.isAuthenticated) {
+        // Usuario autenticado
+        const userSockets = entry.authUsers.get(socket.userId);
+        if (userSockets) {
+          userSockets.delete(socket.id);
 
-            if (userSockets.size === 0) {
-              usersMap.delete(socket.userId);
-            }
-
-            if (usersMap.size === 0) {
-              productViewers.delete(productId);
-            }
-
-            io.to(`product:${productId}`).emit("product_viewers_update", {
-              productId,
-              count: usersMap.size,
-            });
+          if (userSockets.size === 0) {
+            entry.authUsers.delete(socket.userId);
           }
         }
+      } else {
+        // Usuario anónimo
+        entry.anonSockets.delete(socket.id);
       }
+
+      if (entry.authUsers.size === 0 && entry.anonSockets.size === 0) {
+        productViewers.delete(productId);
+      }
+
+      const count =
+        (entry.authUsers?.size || 0) + (entry.anonSockets?.size || 0);
+
+      io.to(`product:${productId}`).emit("product_viewers_update", {
+        productId,
+        count,
+      });
       /* FIN control de usuarios que están viendo un producto */
     });
   });
@@ -339,6 +333,17 @@ const handleSendMessage = async (socket, io, data) => {
 };
 
 /**
+ * Función para obtener la instancia de Socket.IO
+ * para poder usarla en otros archivos
+ */
+const getIO = () => {
+  if (!ioInstance) {
+    throw new Error("Socket.IO no inicializado");
+  }
+  return ioInstance;
+};
+
+/**
  * Obtiene el socket ID de un usuario conectado
  * @param {string} userId - ID del usuario
  * @returns {string|undefined} Socket ID del usuario
@@ -357,6 +362,7 @@ const isUserConnected = (userId) => {
 };
 
 module.exports = {
+  getIO,
   setupSocketIO,
   getUserSocketId,
   isUserConnected,

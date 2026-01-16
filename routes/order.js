@@ -19,7 +19,7 @@ router.get("/", getOrders);
 router.get("/:id", getOrderById);
 
 // Crear una nueva orden
-router.post("/", createOrder);
+router.post("/", isAuthenticated, createOrder);
 
 // Actualizar una orden (ej. status)
 router.patch("/:id", updateOrder);

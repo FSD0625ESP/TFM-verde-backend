@@ -280,17 +280,7 @@ const createOrder = async (req, res) => {
       ],
       { session }
     );
-    /*
-    const order = await Order.create({
-      customerId,
-      storeId,
-      addressId,
-      items,
-      statusDates: {
-        pending: new Date(),
-      },
-    });
-*/
+
     // Crear delivery simulado (dev) para tracking en tiempo real
     // - Origen: dirección hardcoded (almacén)
     // - Destino: addressId del pedido
@@ -378,6 +368,20 @@ const createOrder = async (req, res) => {
     const { sendOrderNotificationToStoreEmail } = require("../services/emails");
 
     const seller = await User.findById(store.ownerId);
+
+    // emitir notificación por socket al vendedor (si está conectado)
+    const io = req.app.get("io");
+
+    const sellerSocketId = getUserSocketId(store.ownerId.toString());
+
+    if (sellerSocketId) {
+      io.to(sellerSocketId).emit("new_order", {
+        orderId: order._id,
+        storeId,
+        totalItems,
+        totalPrice,
+      });
+    }
 
     try {
       // Obtener los detalles de cada producto

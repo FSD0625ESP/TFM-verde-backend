@@ -40,7 +40,6 @@ const adminRoutes = require("./routes/admin");
 const notificationRoutes = require("./routes/notifications");
 const mongoose = require("mongoose");
 
-
 app.use(
   cors({
     origin: process.env.FRONTEND_URL, // Cambia esto a la URL de tu frontend

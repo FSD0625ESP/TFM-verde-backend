@@ -67,6 +67,22 @@ const setupSocketIO = (io) => {
     if (socket.isAuthenticated) {
       const Chat = require("../models/chat");
 
+      // Obtener todos los chats del usuario para unirlo automáticamente a las salas
+      const userChats = await Chat.find({
+        $or: [
+          { userId: new mongoose.Types.ObjectId(socket.userId) },
+          { ownerId: new mongoose.Types.ObjectId(socket.userId) },
+        ],
+        deletedAt: null,
+      }).select("_id");
+
+      // Unir automáticamente a todas las salas de chat del usuario
+      userChats.forEach((chat) => {
+        socket.join(`chat:${chat._id}`);
+      });
+
+      console.log(`🔗 User ${socket.userId} auto-joined ${userChats.length} chat rooms`);
+
       const initialUnread = await Chat.aggregate([
         {
           $match: {
@@ -152,8 +168,10 @@ const setupSocketIO = (io) => {
         const now = new Date();
         if (chat.userId.toString() === socket.userId) {
           chat.customerLastReadAt = now;
+          chat.customerUnreadCount = 0; // Resetear contador del customer
         } else if (store?.ownerId?.toString() === socket.userId) {
           chat.ownerLastReadAt = now;
+          chat.ownerUnreadCount = 0; // Resetear contador del owner
         }
         await chat.save();
         socket.to(`chat:${chatId}`).emit("messages_read", {
@@ -161,6 +179,40 @@ const setupSocketIO = (io) => {
           userId: socket.userId,
           at: now,
         });
+
+        // Recalcular total de no leídos y emitir al usuario
+        const totalUnread = await Chat.aggregate([
+          {
+            $match: {
+              $or: [
+                { userId: new mongoose.Types.ObjectId(socket.userId) },
+                { ownerId: new mongoose.Types.ObjectId(socket.userId) },
+              ],
+              deletedAt: null,
+            },
+          },
+          {
+            $project: {
+              unread: {
+                $cond: [
+                  {
+                    $eq: ["$ownerId", new mongoose.Types.ObjectId(socket.userId)],
+                  },
+                  "$ownerUnreadCount",
+                  "$customerUnreadCount",
+                ],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$unread" },
+            },
+          },
+        ]);
+
+        socket.emit("unread_messages_count", totalUnread[0]?.total || 0);
       } catch (_) {
         // noop
       }
@@ -342,6 +394,16 @@ const handleSendMessage = async (socket, io, data) => {
     };
 
     chat.messages.push(newMessage);
+
+    // Incrementar contador de no leídos del receptor
+    if (isOwner) {
+      // El owner envió el mensaje, incrementar contador del customer
+      chat.customerUnreadCount += 1;
+    } else {
+      // El customer envió el mensaje, incrementar contador del owner
+      chat.ownerUnreadCount += 1;
+    }
+
     await chat.save();
 
     // Obtener el mensaje recién guardado con su _id
@@ -370,6 +432,15 @@ const handleSendMessage = async (socket, io, data) => {
       socket.userId === chat.userId.toString()
         ? chat.ownerId?.toString()
         : chat.userId.toString();
+
+    console.log("📨 SEND MESSAGE DEBUG:", {
+      senderId: socket.userId,
+      chatUserId: chat.userId.toString(),
+      chatOwnerId: chat.ownerId?.toString(),
+      receiverId,
+      isOwner,
+      isCustomer,
+    });
 
     let totalUnread = [];
 
@@ -403,10 +474,19 @@ const handleSendMessage = async (socket, io, data) => {
 
     const unreadTotal = totalUnread[0]?.total || 0;
 
+    console.log("📨 CALCULATED UNREAD FOR RECEIVER:", {
+      receiverId,
+      unreadTotal,
+    });
+
     // Emitir SOLO al receptor
     const receiverSocketId = connectedUsers.get(receiverId);
+    console.log("📨 RECEIVER SOCKET ID:", receiverSocketId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("unread_messages_count", unreadTotal);
+      console.log("📨 EMITTED unread_messages_count TO:", receiverId, unreadTotal);
+    } else {
+      console.log("⚠️ RECEIVER NOT CONNECTED:", receiverId);
     }
   } catch (error) {
     socket.emit("error", { message: "Error al enviar mensaje" });

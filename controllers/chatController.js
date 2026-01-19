@@ -221,6 +221,23 @@ exports.getOrCreateChat = async (req, res) => {
                         select: 'firstName lastName email profileImage'
                     }
                 });
+
+            // Unir a ambos usuarios a la sala del chat vía socket
+            const { getUserSocketId } = require('../services/socket');
+            const customerSocketId = getUserSocketId(userId);
+            const ownerSocketId = getUserSocketId(store.ownerId.toString());
+
+            const { getIO } = require('../services/socket');
+            const io = getIO();
+
+            if (customerSocketId) {
+                io.to(customerSocketId).emit('join_new_chat', { chatId: chat._id });
+            }
+            if (ownerSocketId) {
+                io.to(ownerSocketId).emit('join_new_chat', { chatId: chat._id });
+            }
+
+            console.log(`✨ NEW CHAT CREATED: ${chat._id}, notified users`);
         }
 
         // Formatear respuesta para que sea consistente con getUserChats

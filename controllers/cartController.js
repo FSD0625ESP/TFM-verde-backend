@@ -67,6 +67,7 @@ exports.addToCart = async (req, res) => {
 
     if (!userId && !sessionId)
       return res.status(401).json({ message: "Usuario no autenticado" });
+
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
@@ -96,8 +97,8 @@ exports.addToCart = async (req, res) => {
       if (product) total += product.price * item.quantity;
     }
     cart.total = total;
-
     await cart.save();
+
     //Populamos el carrito para fronted antes de enviarlo
     cart = await cart.populate(
       "items.productId",
@@ -181,13 +182,12 @@ exports.removeItem = async (req, res) => {
     );
 
     const userId = req.user?.id;
+    const sessionId = req.body.sessionId || null;
 
-    if (!userId)
-      return res.status(401).json({ message: "Usuario no autenticado" });
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
-    let cart = await Cart.findOne({ userId });
+    let cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null });
     if (!cart)
       return res.status(404).json({ message: "Carrito no encontrado" });
 
@@ -214,7 +214,6 @@ exports.removeItem = async (req, res) => {
         console.log("📉 Cantidad reducida a:", newQuantity);
       }
     }
-
     console.log("📦 Items después de modificar:", cart.items.length);
 
     // Recalcular total
@@ -230,7 +229,7 @@ exports.removeItem = async (req, res) => {
 
     console.log("📤 Recargando carrito con populate...");
     // Recargar y poplar el carrito para frontend antes de enviarlo
-    cart = await Cart.findOne({ userId }).populate(
+    cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null }).populate(
       "items.productId",
       "title images price _id storeId"
     );
@@ -253,10 +252,9 @@ exports.removeItem = async (req, res) => {
 exports.clearCart = async (req, res) => {
   try {
     const userId = req.user?.id;
-    if (!userId)
-      return res.status(401).json({ message: "Usuario no autenticado" });
+    const sessionId = req.body.sessionId || null;
 
-    const cart = await Cart.findOne({ userId });
+    const cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null });
     if (!cart)
       return res.status(404).json({ message: "Carrito no encontrado" });
 

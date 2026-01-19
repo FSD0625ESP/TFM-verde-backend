@@ -12,8 +12,10 @@ const cleanAbandonedCarts = async () => {
         }
 
         const now = new Date();
+
         // Carritos anónimos no actualizados en 24 horas
         const anonymousLimit = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
         // Carritos de usuario no actualizados en 7 días
         const userLimit = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 

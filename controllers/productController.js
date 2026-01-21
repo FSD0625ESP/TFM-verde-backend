@@ -11,6 +11,9 @@ const getActiveStoresIds = require("./storeController").getActiveStoresIds;
 // podrá ver todos los productos de su tienda. 
 */
 const canUserSeeProduct = (product, user) => {
+
+  console.log("DATOS DE PRODUCTO", product);
+  console.log("DATOS DE USUARIO", user);
   if (!product.storeId) return false;
 
   // tienda activa → visible para todos
@@ -102,7 +105,7 @@ const getAllOfferProducts = async (req, res) => {
 */
 const getProductById = async (req, res) => {
   try {
-    const productById = await product
+    const foundProduct = await product
       .findById(req.params.id)
       .populate({
         path: "storeId",
@@ -110,17 +113,18 @@ const getProductById = async (req, res) => {
       })
       .populate("categories", ["name"]);
 
-    if (!productById) {
+    if (!foundProduct) {
       return res.status(404).json({ msg: "Producto no encontrado" });
     }
-
-    if (!canUserSeeProduct(productById, req.user)) {
+    console.log("DATOS DE PRODUCTO", foundProduct);
+    console.log("DATOS DE USUARIO", req.user);
+    if (!canUserSeeProduct(foundProduct, req.user)) {
       return res.status(403).json({
         msg: "No tienes permiso para ver este producto",
       });
     }
 
-    return res.status(200).json(productById);
+    return res.status(200).json(foundProduct);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -208,8 +212,8 @@ const searchProductsFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     // convert to ObjectId instances if possible
     const catObjectIds = cats
@@ -239,8 +243,8 @@ const searchProductsFunction = async (
     const strs = Array.isArray(stores)
       ? stores
       : typeof stores === "string"
-      ? stores.split(",")
-      : [];
+        ? stores.split(",")
+        : [];
 
     // convert to ObjectId instances if possible
     const storeObjectIds = strs
@@ -399,8 +403,8 @@ const getRelatedProducts = async (req, res) => {
     const categoryIds = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-      ? categories.split(",")
-      : [];
+        ? categories.split(",")
+        : [];
 
     // Convert to ObjectId instances
     const categoryObjectIds = categoryIds

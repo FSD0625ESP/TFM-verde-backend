@@ -13,7 +13,7 @@ const cartSchema = new mongoose.Schema(
     sessionId: {
       type: String,
       required: false,
-      unique: true, // Múltiples carritos anónimos permitidos
+      unique: false, // Múltiples carritos anónimos permitidos
       nullable: true,
     },
     items: [

@@ -150,6 +150,7 @@ const getOrderById = async (req, res) => {
     console.log("🔍 getOrderById - User ID (string):", req.user.id);
     const order = await Order.findById(req.params.id)
       .populate("items.productId")
+      .populate("customerId", "firstName lastName email profileImage")
       .populate("addressId");
 
     if (!order) {
@@ -158,7 +159,7 @@ const getOrderById = async (req, res) => {
     }
 
     // Comprobar que el usuario autenticado es el propietario
-    if (order.customerId.toString() !== req.user.id.toString()) {
+    if (order.customerId._id.toString() !== req.user.id.toString()) {
       console.log(
         "⛔ Acceso denegado: usuario",
         req.user.id,
@@ -287,9 +288,8 @@ const createOrder = async (req, res) => {
     try {
       const address = await Address.findById(addressId).lean();
       if (address) {
-        const destinationText = `${address.street}, ${address.postalCode} ${
-          address.city
-        }, ${address.state}, ${address.country || "España"}`;
+        const destinationText = `${address.street}, ${address.postalCode} ${address.city
+          }, ${address.state}, ${address.country || "España"}`;
 
         let origin;
         let destination;

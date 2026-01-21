@@ -22,7 +22,7 @@ router.get("/featured", optionalAuth, getAllFeaturedProducts);
 router.get("/offer", optionalAuth, getAllOfferProducts);
 router.get("/search", optionalAuth, searchProducts);
 router.get("/related/:id", optionalAuth, getRelatedProducts);
-router.get("/product/:id", getProductById);
+router.get("/product/:id", optionalAuth, getProductById);
 router.delete(
   "/delete-product/:id/:userId",
   isAuthenticated,

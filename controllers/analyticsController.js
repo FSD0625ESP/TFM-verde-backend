@@ -31,11 +31,9 @@ const trackEvent = async (req, res) => {
 
         // Obtener información del user agent
         const userAgentString = req.headers["user-agent"] || "";
-        console.log("📊 Analytics - User-Agent recibido:", userAgentString);
 
         const parser = new UAParser(userAgentString);
         const uaResult = parser.getResult();
-        console.log("📊 Analytics - Browser detectado:", uaResult.browser.name, uaResult.browser.version);
 
         // Construir metadata
         const metadata = {
@@ -83,7 +81,6 @@ const trackEvent = async (req, res) => {
         });
 
         await analyticsEvent.save();
-        console.log("📊 Analytics - Evento guardado:", eventType, "storeId:", storeId, "productId:", productId);
 
         res.status(201).json({
             msg: "Evento registrado exitosamente",

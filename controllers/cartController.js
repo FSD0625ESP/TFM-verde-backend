@@ -15,9 +15,10 @@ exports.getCart = async (req, res) => {
 
     // Si hay userId, buscar SOLO por userId (usuarios logueados)
     // Si NO hay userId, buscar por sessionId (usuarios anónimos)
+    // comprobamos que no se haya hecho un softdelete y cojemos el carrito mas actual
     const query = userId
-      ? { userId }
-      : { sessionId, userId: null };
+      ? { userId, deletedAt: null }
+      : { sessionId, userId: null, deletedAt: null };
 
     const cart = await Cart.findOne(query).populate(
       "items.productId",
@@ -65,16 +66,24 @@ exports.addToCart = async (req, res) => {
     const { productId, quantity = 1, sessionId = null } = req.body;
     const userId = req.user?.id;
 
-    if (!userId && !sessionId)
-      return res.status(401).json({ message: "Usuario no autenticado" });
-
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
-    let cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null });
+    // Si el usuario está logueado, IGNORAR sessionId para evitar duplicados
+    const searchSessionId = userId ? null : (sessionId || null);
+
+    let cart = await Cart.findOne({
+      userId: userId || null,
+      sessionId: searchSessionId,
+      deletedAt: null
+    });
 
     if (!cart) {
-      cart = new Cart({ userId: userId || null, sessionId: sessionId || null, items: [] });
+      cart = new Cart({
+        userId: userId || null,
+        sessionId: searchSessionId,
+        items: []
+      });
     }
     const canAdd = await isPosibleAddToCartProduct(cart, productId);
     if (!canAdd) {
@@ -129,7 +138,7 @@ exports.updateItem = async (req, res) => {
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
-    let cart = await Cart.findOne({ userId });
+    let cart = await Cart.findOne({ userId, deletedAt: null });
     if (!cart)
       return res.status(404).json({ message: "Carrito no encontrado" });
 
@@ -187,7 +196,18 @@ exports.removeItem = async (req, res) => {
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
-    let cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null });
+    console.log("💡 User ID in getCart:", userId);
+
+    // Si hay userId, buscar SOLO por userId (usuarios logueados)
+    // Si NO hay userId, buscar por sessionId (usuarios anónimos)
+    // comprobamos que no se haya hecho un softdelete y cojemos el carrito mas actual
+    const query = userId
+      ? { userId, deletedAt: null }
+      : { sessionId, userId: null, deletedAt: null };
+
+    let cart = await Cart.findOne(query);
+    console.log("📦 Carrito encontrado:", cart);
+
     if (!cart)
       return res.status(404).json({ message: "Carrito no encontrado" });
 
@@ -229,7 +249,7 @@ exports.removeItem = async (req, res) => {
 
     console.log("📤 Recargando carrito con populate...");
     // Recargar y poplar el carrito para frontend antes de enviarlo
-    cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null }).populate(
+    cart = await Cart.findOne({ _id: cart._id }).populate(
       "items.productId",
       "title images price _id storeId"
     );
@@ -253,8 +273,10 @@ exports.clearCart = async (req, res) => {
   try {
     const userId = req.user?.id;
     const sessionId = req.body.sessionId || null;
-
-    const cart = await Cart.findOne({ userId: userId || null, sessionId: sessionId || null });
+    const query = userId
+      ? { userId, deletedAt: null }
+      : { sessionId, userId: null, deletedAt: null };
+    const cart = await Cart.findOne(query);
     if (!cart)
       return res.status(404).json({ message: "Carrito no encontrado" });
 
@@ -285,52 +307,44 @@ exports.replaceAnonymousCart = async (req, res) => {
 
     console.log("🔄 Reemplazando carrito anónimo por carrito de usuario", { userId, sessionId });
 
-    // 1. Obtener carrito anónimo ANTES de eliminarlo
+    // 1. SOFT-DELETE todos los carritos antiguos del usuario para evitar contaminación
+    const deleteResult = await Cart.updateMany(
+      { userId, deletedAt: null },
+      { $set: { deletedAt: new Date() } }
+    );
+    console.log("🗑️ Carritos antiguos del usuario soft-deleted:", deleteResult.modifiedCount);
+
+    // 2. Obtener carrito anónimo (si existe)
     let anonymousCart = null;
     if (sessionId) {
-      anonymousCart = await Cart.findOne({ sessionId, userId: null });
+      anonymousCart = await Cart.findOne({ sessionId, userId: null, deletedAt: null });
       console.log("📦 Carrito anónimo encontrado:", anonymousCart?.items.length || 0, "items");
     }
 
-    // 2. Buscar o crear carrito del usuario
-    let userCart = await Cart.findOne({ userId });
+    // 3. Crear NUEVO carrito del usuario con SOLO los items del anónimo
+    const userCart = new Cart({
+      userId,
+      sessionId: null,
+      items: anonymousCart?.items || [],
+      total: anonymousCart?.total || 0
+    });
+    await userCart.save();
+    console.log("✨ Carrito de usuario creado limpio con", userCart.items.length, "items del anónimo");
 
-    if (!userCart) {
-      // Crear carrito con los items del anónimo (si existen)
-      userCart = new Cart({
-        userId,
-        sessionId: null,
-        items: anonymousCart?.items || [],
-        total: anonymousCart?.total || 0
-      });
-      await userCart.save();
-      console.log("✨ Carrito de usuario creado con", userCart.items.length, "items del anónimo");
-    } else {
-      // Usuario ya tenía carrito → transferir items del anónimo si existen
-      if (anonymousCart && anonymousCart.items.length > 0) {
-        userCart.items = anonymousCart.items;
-        userCart.total = anonymousCart.total;
-        await userCart.save();
-        console.log("🔄 Items del carrito anónimo transferidos al carrito del usuario:", userCart.items.length, "items");
-      } else {
-        console.log("👤 Usuario ya tenía carrito con", userCart.items.length, "items → se mantiene");
-      }
-    }
-
-    // 3. Eliminar carrito anónimo después de transferir items
+    // 4. Eliminar carrito anónimo después de transferir items
     if (sessionId && anonymousCart) {
       await Cart.deleteOne({ sessionId, userId: null });
       console.log("🗑️ Carrito anónimo eliminado");
     }
 
-    // 4. Retornar carrito del usuario con populate
-    userCart = await Cart.findOne({ userId }).populate(
+    // 5. Retornar carrito del usuario con populate
+    const populatedCart = await Cart.findOne({ userId, deletedAt: null }).populate(
       "items.productId",
       "title images price _id storeId"
     );
 
-    console.log("✅ Carrito de usuario cargado:", userCart.items.length, "items");
-    res.json(userCart);
+    console.log("✅ Carrito de usuario cargado:", populatedCart.items.length, "items");
+    res.json(populatedCart);
   } catch (err) {
     console.error("❌ Error reemplazando carrito:", err);
     res.status(500).json({

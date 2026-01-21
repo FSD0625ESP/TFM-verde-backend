@@ -9,6 +9,6 @@ const {
 router.use(isAuthenticated);
 
 // GET /notifications/pending
-router.get("/pending", getPendingNotifications);
+router.get("/pending", isAuthenticated, getPendingNotifications);
 
 module.exports = router;

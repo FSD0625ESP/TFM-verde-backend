@@ -104,8 +104,22 @@ const getProductById = async (req, res) => {
   try {
     const productById = await product
       .findById(req.params.id)
-      .populate("categories", ["name"])
-      .populate("storeId", ["name", "slug", "logo"]);
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
+      .populate("categories", ["name"]);
+
+    if (!productById) {
+      return res.status(404).json({ msg: "Producto no encontrado" });
+    }
+
+    if (!canUserSeeProduct(productById, req.user)) {
+      return res.status(403).json({
+        msg: "No tienes permiso para ver este producto",
+      });
+    }
+
     return res.status(200).json(productById);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -185,7 +199,7 @@ const searchProductsFunction = async (
     const safeText = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     query.$or = [
       { title: { $regex: safeText, $options: "i" } },
-      { description: { $regex: safeText, $options: "i" } }
+      { description: { $regex: safeText, $options: "i" } },
     ];
   }
 
@@ -194,9 +208,8 @@ const searchProductsFunction = async (
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-        ? categories.split(",")
-        : [];
-
+      ? categories.split(",")
+      : [];
 
     // convert to ObjectId instances if possible
     const catObjectIds = cats
@@ -226,9 +239,8 @@ const searchProductsFunction = async (
     const strs = Array.isArray(stores)
       ? stores
       : typeof stores === "string"
-        ? stores.split(",")
-        : [];
-
+      ? stores.split(",")
+      : [];
 
     // convert to ObjectId instances if possible
     const storeObjectIds = strs
@@ -387,8 +399,8 @@ const getRelatedProducts = async (req, res) => {
     const categoryIds = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
-        ? categories.split(",")
-        : [];
+      ? categories.split(",")
+      : [];
 
     // Convert to ObjectId instances
     const categoryObjectIds = categoryIds

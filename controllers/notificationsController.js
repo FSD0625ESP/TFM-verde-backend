@@ -3,7 +3,12 @@ const Notification = require("../models/notification");
 // Obtener notificaciones no leídas del usuario autenticado
 const getPendingNotifications = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
+
+    console.log(
+      "🔔 Obteniendo notificaciones pendientes para usuario:",
+      userId
+    );
 
     // 1obtener notificaciones pendientes
     const notifications = await Notification.find({

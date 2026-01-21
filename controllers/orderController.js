@@ -330,7 +330,7 @@ const createOrder = async (req, res) => {
       // Si algo falla, el pedido sigue creándose (no rompemos checkout)
     }
 
-    console.log("✅ Orden creada:", order._id);
+    // console.log("✅ Orden creada:", order._id);
 
     await session.commitTransaction();
     session.endSession();

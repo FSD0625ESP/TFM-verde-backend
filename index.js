@@ -46,6 +46,8 @@ app.use(
     credentials: true, // Habilita el envío de cookies
   })
 );
+if (process.env.NODE_ENV === "production")
+  app.set("trust proxy", 1);
 
 // Configurar Socket.IO con CORS
 const io = new Server(server, {

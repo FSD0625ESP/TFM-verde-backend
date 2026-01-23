@@ -306,6 +306,71 @@ const setupSocketIO = (io) => {
 
     /* FIN control de usuarios que están viendo un producto */
 
+    /* INICIO control de órdenes y deliveries */
+    socket.on("join_order", ({ orderId }) => {
+      if (!orderId) return;
+      const room = `order:${orderId}`;
+      socket.join(room);
+      console.log(`📦 Socket ${socket.id} joined order room: ${room}`);
+    });
+
+    socket.on("join_delivery", ({ deliveryId }) => {
+      if (!deliveryId) return;
+      const room = `delivery:${deliveryId}`;
+      socket.join(room);
+      console.log(`🚚 Socket ${socket.id} joined delivery room: ${room}`);
+    });
+
+    socket.on("start_order_shipping", async ({ orderId }) => {
+      if (!orderId) return;
+
+      try {
+        const Order = require("../models/order");
+        const Delivery = require("../models/delivery");
+        const { startDeliverySimulation } = require("./deliverySimulation");
+
+        // Buscar la orden
+        const order = await Order.findById(orderId);
+        if (!order) {
+          console.log("⚠️ Orden no encontrada:", orderId);
+          return socket.emit("error", { message: "Orden no encontrada" });
+        }
+
+        // Actualizar estado de la orden a "shipped"
+        order.status = "shipped";
+        if (!order.statusDates) {
+          order.statusDates = {};
+        }
+        order.statusDates.shipped = new Date();
+        await order.save();
+
+        // Emitir actualización de orden a todos en la sala
+        io.to(`order:${orderId}`).emit("order_update", {
+          orderId: orderId.toString(),
+          status: "shipped",
+        });
+
+        // Buscar el delivery asociado
+        const delivery = await Delivery.findOne({ orderId });
+        if (delivery) {
+          // Iniciar simulación de entrega
+          await startDeliverySimulation({
+            io,
+            deliveryId: delivery._id.toString(),
+            orderId: orderId.toString(),
+            tickMs: 2000, // Actualizar cada 2 segundos
+          });
+          console.log(`🚚 Simulación de entrega iniciada para orden ${orderId}`);
+        } else {
+          console.log("⚠️ No se encontró delivery para orden:", orderId);
+        }
+      } catch (error) {
+        console.error("❌ Error en start_order_shipping:", error);
+        socket.emit("error", { message: "Error al iniciar envío" });
+      }
+    });
+    /* FIN control de órdenes y deliveries */
+
     // Desconexión
     socket.on("disconnect", () => {
       connectedUsers.delete(socket.userId);

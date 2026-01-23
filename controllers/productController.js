@@ -12,8 +12,6 @@ const getActiveStoresIds = require("./storeController").getActiveStoresIds;
 */
 const canUserSeeProduct = (product, user) => {
 
-  console.log("DATOS DE PRODUCTO", product);
-  console.log("DATOS DE USUARIO", user);
   if (!product.storeId) return false;
 
   // tienda activa → visible para todos
@@ -116,8 +114,6 @@ const getProductById = async (req, res) => {
     if (!foundProduct) {
       return res.status(404).json({ msg: "Producto no encontrado" });
     }
-    console.log("DATOS DE PRODUCTO", foundProduct);
-    console.log("DATOS DE USUARIO", req.user);
     if (!canUserSeeProduct(foundProduct, req.user)) {
       return res.status(403).json({
         msg: "No tienes permiso para ver este producto",

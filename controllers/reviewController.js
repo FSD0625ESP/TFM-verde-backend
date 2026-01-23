@@ -22,7 +22,7 @@ const getReviewsByStoreId = async (req, res) => {
       storeId: req.params.id,
       deletedAt: null,
     })
-      .populate("userId", ["firstname", "lastname"])
+      .populate("userId", ["firstName", "lastName"])
       .populate("storeId", ["name"]);
     return res.status(200).json(reviewsByStoreId);
   } catch (error) {

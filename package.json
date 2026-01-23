@@ -2,8 +2,16 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "stores:activate": "node utils/activateAllStores.js",
     "seed": "node seeds/stores.js",
-    "seedChat": "node seeds/chats.js"
+    "seedChat": "node seeds/chats.js",
+    "seedAnalytics": "node seeds/analytics.js",
+    "seedOrders": "node seeds/orders.js",
+    "seedAnalytics:verify": "node seeds/analytics.verify.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:analytics": "jest tests/analytics",
+    "reports": "node seeds/reports.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -17,9 +25,15 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.10",
     "nodemon": "^3.1.10",
     "slugify": "^1.6.6",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "ua-parser-js": "^1.0.41"
+  },
+  "devDependencies": {
+    "jest": "^30.1.3",
+    "mongodb-memory-server": "^10.2.0"
   }
 }

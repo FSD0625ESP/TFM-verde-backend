@@ -2,21 +2,24 @@ const express = require("express");
 const router = express.Router();
 const cartController = require("../controllers/cartController");
 
-const { isAuthenticated } = require("../middlewares/authMiddleware");
+const { isAuthenticated, optionalAuth } = require("../middlewares/authMiddleware");
 
 // Obtener el carrito del usuario
-router.get("/", isAuthenticated, cartController.getCart);
+router.get("/", optionalAuth, cartController.getCart);
 
 // Agregar producto al carrito
-router.post("/add", isAuthenticated, cartController.addToCart);
+router.post("/add", optionalAuth, cartController.addToCart);
 
 // Actualizar cantidad de un producto
-router.put("/update", isAuthenticated, cartController.updateItem);
+router.put("/update", optionalAuth, cartController.updateItem);
 
 // Eliminar un producto del carrito
-router.delete("/remove", isAuthenticated, cartController.removeItem);
+router.delete("/remove", optionalAuth, cartController.removeItem);
 
 // Vaciar carrito
-router.delete("/clear", isAuthenticated, cartController.clearCart);
+router.delete("/clear", optionalAuth, cartController.clearCart);
+
+// Reemplazar carrito anónimo por carrito de usuario (login/registro)
+router.post("/replace", isAuthenticated, cartController.replaceAnonymousCart);
 
 module.exports = router;

@@ -1,19 +1,47 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const orderSchema = new mongoose.Schema({
-    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
-    addressId: { type: mongoose.Schema.Types.ObjectId, ref: 'Address', required: true },
+const orderSchema = new mongoose.Schema(
+  {
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+    addressId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Address",
+      required: true,
+    },
     items: [
-        {
-            productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-            quantity: { type: Number, required: true },
-            price: { type: Number, required: true }
-        }
+      {
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
+        quantity: { type: Number, required: true },
+        price: { type: Number, required: true },
+      },
     ],
-    timestamps: true,
-    status: { type: String, enum: ['pending', 'shipped', 'delivered', 'canceled'], default: 'pending' },
-    deletedAt: { type: Date }
-});
+    status: {
+      type: String,
+      enum: ["pending", "shipped", "delivered", "canceled", "returned"],
+      default: "pending",
+    },
+    statusDates: {
+      pending: { type: Date },
+      shipped: { type: Date },
+      delivered: { type: Date },
+      canceled: { type: Date },
+    },
+    deletedAt: { type: Date },
+  },
+  { timestamps: true }
+);
 
-module.exports = mongoose.model('Order', orderSchema);
+module.exports = mongoose.model("Order", orderSchema);

@@ -2,6 +2,28 @@ const mongoose = require("mongoose");
 const product = require("../models/product");
 const store = require("../models/store");
 const generateSlug = require("../utils/generateSlug");
+const getActiveStoresIds = require("./storeController").getActiveStoresIds;
+
+/* Función para verificar si el usuario puede ver el producto
+// Si el usuario no está autenticado o no es el propietario, 
+// solo verá productos de tiendas activas.
+// Si el usuario es el propietario de la tienda, 
+// podrá ver todos los productos de su tienda. 
+*/
+const canUserSeeProduct = (product, user) => {
+
+  if (!product.storeId) return false;
+
+  // tienda activa → visible para todos
+  if (product.storeId.active) return true;
+
+  // tienda inactiva → solo visible para el owner
+  if (user && String(product.storeId.ownerId) === String(user.id)) {
+    return true;
+  }
+
+  return false;
+};
 
 /* GET - /products/all
    Get all products
@@ -24,7 +46,8 @@ const getAllProductsByStoreId = async (req, res) => {
   try {
     const products = await product
       .find({ storeId: req.params.id })
-      .populate("storeId", ["name", "slug"]);
+      .populate("storeId", ["name", "slug"])
+      .populate("categories", "name");
     return res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -38,9 +61,16 @@ const getAllFeaturedProducts = async (req, res) => {
   try {
     const products = await product
       .find({ destacado: true })
-      .populate("storeId", ["name", "slug", "logo"])
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
       .populate("categories", ["name"]);
-    return res.status(200).json(products);
+
+    const filteredProducts = products.filter((p) =>
+      canUserSeeProduct(p, req.user)
+    );
+    return res.status(200).json(filteredProducts);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -53,8 +83,16 @@ const getAllOfferProducts = async (req, res) => {
   try {
     const products = await product
       .find({ oferta: true })
-      .populate("storeId", ["name", "slug", "logo"]);
-    return res.status(200).json(products);
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
+      .populate("categories", ["name"]);
+
+    const filteredProducts = products.filter((p) =>
+      canUserSeeProduct(p, req.user)
+    );
+    return res.status(200).json(filteredProducts);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -65,14 +103,75 @@ const getAllOfferProducts = async (req, res) => {
 */
 const getProductById = async (req, res) => {
   try {
-    const productById = await product
+    const foundProduct = await product
       .findById(req.params.id)
-      .populate("storeId", ["name", "slug", "logo"]);
-    return res.status(200).json(productById);
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
+      .populate("categories", ["name"]);
+
+    if (!foundProduct) {
+      return res.status(404).json({ msg: "Producto no encontrado" });
+    }
+    if (!canUserSeeProduct(foundProduct, req.user)) {
+      return res.status(403).json({
+        msg: "No tienes permiso para ver este producto",
+      });
+    }
+
+    return res.status(200).json(foundProduct);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
+
+/* DELETE - /products/delete-product/:id/:userId
+   Delete product by id - only owner can delete
+*/
+const deleteProductById = async (req, res) => {
+  try {
+    const productById = await product
+      .findById(req.params.id)
+      .populate("storeId", ["ownerId"]);
+
+    if (!productById) {
+      return res.status(404).json({ msg: "Producto no encontrado" });
+    }
+    if (productById.storeId.ownerId.toString() !== req.params.userId) {
+      return res
+        .status(403)
+        .json({ msg: "No tienes permiso para eliminar este producto" });
+    }
+
+    await product.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ msg: "Producto eliminado" });
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
+/* PATCH - /products/update-product/:id
+    Update product by id
+*/
+const updateProductById = async (req, res) => {
+  try {
+    const updatedProduct = await product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true } // Devuelve el documento actualizado
+    );
+    if (!updatedProduct) {
+      return res.status(404).json({ msg: `Producto no encontrado` });
+    }
+    return res
+      .status(200)
+      .json({ msg: `Producto actualizado`, product: updatedProduct });
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 const searchProductsFunction = async (
   page = 1,
   text = "",
@@ -80,10 +179,16 @@ const searchProductsFunction = async (
   offer = undefined,
   stores = [],
   min = 0,
-  max = 1000
+  max = 1000,
+  user = null
 ) => {
   const limit = 20;
   const query = { deletedAt: { $exists: false } };
+
+  // la tienda debe estar en estado "active"
+  // (esto se aplica en el seed de productos y en la creación de productos nuevos)
+  const activeStoreIds = await getActiveStoresIds();
+  query.storeId = { $in: activeStoreIds };
 
   // normalize numeric params
   const pageNum = Number(page) || 1;
@@ -91,24 +196,20 @@ const searchProductsFunction = async (
   const maxNum = Number(max) || 500;
 
   if (text) {
-    // title or description contains text (case-insensitive)
+    const safeText = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     query.$or = [
-      { title: { $regex: `^${text}$`, $options: "i" } },
-      { title: { $regex: `.*${text}.*`, $options: "i" } },
-      { description: { $regex: `^${text}$`, $options: "i" } },
-      { description: { $regex: `.*${text}.*`, $options: "i" } },
+      { title: { $regex: safeText, $options: "i" } },
+      { description: { $regex: safeText, $options: "i" } },
     ];
   }
 
   // categories — accept array or comma-separated string
-  if (categories) {
+  if (categories && categories.length > 0) {
     const cats = Array.isArray(categories)
       ? categories
       : typeof categories === "string"
         ? categories.split(",")
         : [];
-
-    console.log("[Backend] Processing categories:", cats);
 
     // convert to ObjectId instances if possible
     const catObjectIds = cats
@@ -131,18 +232,15 @@ const searchProductsFunction = async (
     if (catObjectIds.length > 0) {
       // Use $in for products that match ANY of the selected categories
       query.categories = { $in: catObjectIds };
-      console.log("[Backend] Added categories filter to query");
     }
   }
 
-  if (stores) {
+  if (stores && stores.length > 0) {
     const strs = Array.isArray(stores)
       ? stores
       : typeof stores === "string"
         ? stores.split(",")
         : [];
-
-    console.log("[Backend] Processing stores:", strs);
 
     // convert to ObjectId instances if possible
     const storeObjectIds = strs
@@ -177,7 +275,6 @@ const searchProductsFunction = async (
     }
   }
 
-
   // offer - solo aplicar el filtro si offer es true
   if (offer === "true" || offer === true) {
     query.oferta = true;
@@ -191,18 +288,60 @@ const searchProductsFunction = async (
   }
 
   // Ejecutar ambas queries en paralelo
+  /*
   const [products, totalCount] = await Promise.all([
     product
       .find(query)
-      .populate("storeId", ["name", "logo", "slug"])
+      //.populate("storeId", ["active", "name", "logo", "slug"])
+      .populate({
+        path: "storeId",
+        select: "active name logo slug ownerId",
+      })
       .populate("categories", ["name"])
       .limit(limit)
       .skip((pageNum - 1) * limit),
-    product.countDocuments(query)
+    product.countDocuments(query),
   ]);
 
   console.log("[Backend] Found products:", query);
-  return { products, total: totalCount };
+
+  const filteredProducts = products.filter((p) => canUserSeeProduct(p, req));
+
+  return {
+    products: filteredProducts,
+    total: filteredProducts.length,
+  };
+  */
+
+  /* ---- 1️⃣ traer TODOS los productos que cumplen la query ---- */
+  const allProducts = await product.find(query).populate({
+    path: "storeId",
+    select: "active ownerId",
+  });
+
+  /* ---- 2️⃣ filtrar por visibilidad ---- */
+  const visibleProducts = allProducts.filter((p) => canUserSeeProduct(p, user));
+
+  const total = visibleProducts.length;
+
+  /* ---- 3️⃣ paginar SOBRE los visibles ---- */
+  const paginatedProducts = visibleProducts
+    .slice((pageNum - 1) * limit, pageNum * limit)
+    .map((p) => p._id);
+
+  /* ---- 4️⃣ volver a pedir SOLO los de la página (con populate completo) ---- */
+  const products = await product
+    .find({ _id: { $in: paginatedProducts } })
+    .populate({
+      path: "storeId",
+      select: "name logo slug active ownerId",
+    })
+    .populate("categories", ["name"]);
+
+  return {
+    products,
+    total,
+  };
 };
 
 const searchProducts = async (req, res) => {
@@ -215,14 +354,14 @@ const searchProducts = async (req, res) => {
       offer,
       stores,
       min,
-      max
+      max,
+      req.user
     );
     return res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
 };
-
 
 const createProduct = async (req, res) => {
   try {
@@ -231,7 +370,7 @@ const createProduct = async (req, res) => {
       storeId: new mongoose.Types.ObjectId(storeData._id),
       slug: generateSlug(req.body.title),
       ...req.body,
-    }
+    };
     const newProduct = new product(productData);
     console.log("newProduct", newProduct);
     const savedProduct = await newProduct.save();
@@ -292,11 +431,17 @@ const getRelatedProducts = async (req, res) => {
         categories: { $in: categoryObjectIds },
         deletedAt: { $exists: false },
       })
-      .populate("storeId", ["name", "slug", "logo"])
-      .populate("categories", ["name"])
-      .limit(Number(limit) || 8);
+      .populate({
+        path: "storeId",
+        select: "name logo slug active ownerId",
+      })
+      .populate("categories", ["name"]);
 
-    return res.status(200).json(relatedProducts);
+    const filteredProducts = relatedProducts.filter((p) =>
+      canUserSeeProduct(p, req.user)
+    );
+
+    return res.status(200).json(filteredProducts);
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -308,6 +453,8 @@ module.exports = {
   getAllFeaturedProducts,
   getAllOfferProducts,
   getProductById,
+  deleteProductById,
+  updateProductById,
   searchProductsFunction,
   searchProducts,
   createProduct,

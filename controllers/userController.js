@@ -27,7 +27,7 @@ const register = async (req, res) => {
     }
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).send({ msg: "User already exists" });
+      return res.status(400).send({ msg: "El usuario ya existe" });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({
@@ -39,7 +39,7 @@ const register = async (req, res) => {
     });
     const savedUser = await newUser.save();
     jwt.sign(
-      { id: savedUser._id },
+      { id: savedUser._id, role: savedUser.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
@@ -60,7 +60,7 @@ const register = async (req, res) => {
         });
         res
           .status(201)
-          .send({ msg: "User registered successfully", user: safeUser });
+          .send({ msg: "Usuario registrado correctamente", user: safeUser });
       }
     );
   } catch (error) {
@@ -77,7 +77,7 @@ const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).send({ msg: "Contraseña inválida" });
     jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
@@ -92,8 +92,6 @@ const login = async (req, res) => {
         });
         const safeUser = user.toObject ? user.toObject() : user;
         delete safeUser.password;
-        if (!safeUser.profileImage)
-          safeUser.profileImage = "/images/default-avatar.png";
         res.status(200).send({ msg: "Inicio de sesión exitoso", user: safeUser });
       }
     );
@@ -155,7 +153,7 @@ const googleLogin = async (req, res) => {
     }
 
     jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
       (err, token) => {
@@ -189,7 +187,7 @@ const generateForgotPasswordToken = async (req, res) => {
     if (!user)
       return res.status(404).send({ msg: "No se encontro el usuario" });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
     const temporalToken = new TemporalToken({ userId: user._id, token });
@@ -207,6 +205,7 @@ const generateForgotPasswordToken = async (req, res) => {
       .status(200)
       .send({ msg: "Se ha enviado un correo para restablecer la contraseña" });
   } catch (error) {
+    console.error(error);
     return res.status(400).send({ msg: error.message });
   }
 };
@@ -307,6 +306,7 @@ const contactForm = async (req, res) => {
     return res.status(400).send({ msg: error.message });
   }
 };
+
 
 module.exports = {
   register,

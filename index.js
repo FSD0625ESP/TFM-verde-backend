@@ -4,6 +4,25 @@ const http = require("http");
 const server = http.createServer(app);
 const { Server } = require("socket.io");
 const { setupSocketIO } = require("./services/socket");
+require("./cron/cleanAbandonedCarts");
+
+// Cargar variables de entorno primero
+require("dotenv").config();
+
+// Middlewares globales
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+
+app.use(cookieParser());
+app.use(express.json());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    credentials: true,
+  })
+);
+
+// Importar rutas
 const userRoutes = require("./routes/users");
 const addressRoutes = require("./routes/addresses");
 const storeRoutes = require("./routes/stores");
@@ -12,12 +31,14 @@ const categoryRoutes = require("./routes/categories");
 const reviewRoutes = require("./routes/reviews");
 const chatRoutes = require("./routes/chats");
 const uploadRoutes = require("./routes/uploads");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const cookieParser = require("cookie-parser");
 const cartRoutes = require("./routes/cart");
-require("dotenv").config();
-app.use(cookieParser());
+const orderRoutes = require("./routes/order");
+const deliveryRoutes = require("./routes/deliveries");
+const analyticsRoutes = require("./routes/analytics");
+const reportRoutes = require("./routes/reports");
+const adminRoutes = require("./routes/admin");
+const notificationRoutes = require("./routes/notifications");
+const mongoose = require("mongoose");
 
 app.use(
   cors({
@@ -34,7 +55,6 @@ const io = new Server(server, {
   },
 });
 
-require("dotenv").config();
 app.use(express.json());
 
 mongoose
@@ -43,7 +63,7 @@ mongoose
   .catch((err) => console.log(err));
 
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("This is the backend server for the e-commerce application.");
 });
 
 app.use("/users", userRoutes);
@@ -55,6 +75,12 @@ app.use("/reviews", reviewRoutes);
 app.use("/chats", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/uploads", uploadRoutes);
+app.use("/orders", orderRoutes);
+app.use("/deliveries", deliveryRoutes);
+app.use("/analytics", analyticsRoutes);
+app.use("/reports", reportRoutes);
+app.use("/admin", adminRoutes);
+app.use("/notifications", notificationRoutes);
 
 // ========== SOCKET.IO SETUP ==========
 setupSocketIO(io);

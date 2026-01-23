@@ -317,8 +317,22 @@ exports.replaceAnonymousCart = async (req, res) => {
     // 2. Obtener carrito anónimo (si existe)
     let anonymousCart = null;
     if (sessionId) {
+      console.log("🔍 Buscando carrito anónimo con sessionId:", sessionId);
+
+      // Debug: Ver todos los carritos con este sessionId
+      const allCartsWithSession = await Cart.find({ sessionId });
+      console.log("📊 Todos los carritos con este sessionId:", allCartsWithSession.length);
+      allCartsWithSession.forEach(c => {
+        console.log("  - Cart ID:", c._id, "| userId:", c.userId, "| deletedAt:", c.deletedAt, "| items:", c.items.length);
+      });
+
       anonymousCart = await Cart.findOne({ sessionId, userId: null, deletedAt: null });
       console.log("📦 Carrito anónimo encontrado:", anonymousCart?.items.length || 0, "items");
+      if (!anonymousCart) {
+        console.log("⚠️ No se encontró carrito anónimo válido (userId: null, deletedAt: null)");
+      }
+    } else {
+      console.log("⚠️ No se proporcionó sessionId en el request");
     }
 
     // 3. Crear NUEVO carrito del usuario con SOLO los items del anónimo

@@ -326,7 +326,7 @@ exports.replaceAnonymousCart = async (req, res) => {
         console.log("  - Cart ID:", c._id, "| userId:", c.userId, "| deletedAt:", c.deletedAt, "| items:", c.items.length);
       });
 
-      anonymousCart = await Cart.findOne({ sessionId, userId: null, deletedAt: null });
+      anonymousCart = await Cart.findOne({ sessionId, userId: null });
       console.log("📦 Carrito anónimo encontrado:", anonymousCart?.items.length || 0, "items");
       if (!anonymousCart) {
         console.log("⚠️ No se encontró carrito anónimo válido (userId: null, deletedAt: null)");

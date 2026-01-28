@@ -55,7 +55,7 @@ const register = async (req, res) => {
         res.cookie("token", token, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
           maxAge: 24 * 60 * 60 * 1000, // 1 día
         });
         res
@@ -112,7 +112,13 @@ const me = async (req, res) => {
 
 const logout = async (req, res) => {
   try {
-    res.clearCookie("token");
+    // Limpiar cookie con las MISMAS opciones que se usaron al crearla
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/"
+    });
     res.status(200).send({ msg: "Cierre de sesión exitoso" });
   } catch (error) {
     return res.status(400).send({ msg: error.message });
@@ -163,7 +169,7 @@ const googleLogin = async (req, res) => {
         res.cookie("token", token, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
           maxAge: 24 * 60 * 60 * 1000,
         });
         const safeUser = user.toObject();

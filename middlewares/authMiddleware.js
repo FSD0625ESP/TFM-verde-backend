@@ -19,11 +19,18 @@ const optionalAuth = (req, res, next) => {
     const token = req.cookies.token;
     if (!token) {
         req.user = null;
-        req.sessionId = null;
         return next();
     }
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) {
+            // Si el token es inválido o expiró, limpiarlo para evitar confusión
+            console.log('⚠️ Token inválido en optionalAuth, limpiando cookie');
+            res.clearCookie("token", {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+                path: "/"
+            });
             req.user = null;
         } else {
             req.user = user;

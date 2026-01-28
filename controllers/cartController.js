@@ -67,6 +67,12 @@ exports.addToCart = async (req, res) => {
     const userId = req.user?.id;
 
     console.log("➕ addToCart llamado - userId:", userId, "| sessionId recibido:", sessionId);
+    
+    // 🔒 SEGURIDAD: Si hay sessionId pero también userId, algo está mal (posible cookie no eliminada)
+    if (userId && sessionId) {
+      console.warn("⚠️ ALERTA: Se recibió tanto userId como sessionId. Posible token no eliminado después de logout.");
+      console.warn("   Token en cookie:", req.cookies.token ? "SÍ EXISTE" : "NO EXISTE");
+    }
 
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });

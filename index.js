@@ -9,16 +9,42 @@ require("./cron/cleanAbandonedCarts");
 // Cargar variables de entorno primero
 require("dotenv").config();
 
+// IMPORTANTE: Configurar trust proxy ANTES que cualquier middleware en producción
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // Middlewares globales
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
 app.use(cookieParser());
 app.use(express.json());
+
+// Configuración de CORS unificada
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  process.env.FRONTEND_URL,
+  "https://meraki-frontend.netlify.app"
+].filter(Boolean); // Eliminar undefined
+
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:5174", "https://meraki-frontend.netlify.app"],
+    origin: (origin, callback) => {
+      // Permitir requests sin origin (como Postman, apps móviles)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`🚫 CORS blocked origin: ${origin}`);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -40,24 +66,13 @@ const adminRoutes = require("./routes/admin");
 const notificationRoutes = require("./routes/notifications");
 const mongoose = require("mongoose");
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL, // Cambia esto a la URL de tu frontend
-    credentials: true, // Habilita el envío de cookies
-  })
-);
-if (process.env.NODE_ENV === "production")
-  app.set("trust proxy", 1);
-
-// Configurar Socket.IO con CORS
+// Configurar Socket.IO con CORS (debe usar los mismos origins que Express)
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: allowedOrigins,
     credentials: true,
   },
 });
-
-app.use(express.json());
 
 mongoose
   .connect(process.env.MONGO_URI)

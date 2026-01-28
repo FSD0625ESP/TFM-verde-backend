@@ -66,11 +66,15 @@ exports.addToCart = async (req, res) => {
     const { productId, quantity = 1, sessionId = null } = req.body;
     const userId = req.user?.id;
 
+    console.log("➕ addToCart llamado - userId:", userId, "| sessionId recibido:", sessionId);
+
     if (!productId)
       return res.status(400).json({ message: "productId es obligatorio" });
 
     // Si el usuario está logueado, IGNORAR sessionId para evitar duplicados
     const searchSessionId = userId ? null : (sessionId || null);
+
+    console.log("🔍 Buscando carrito con - userId:", userId || null, "| sessionId:", searchSessionId);
 
     let cart = await Cart.findOne({
       userId: userId || null,
@@ -79,11 +83,14 @@ exports.addToCart = async (req, res) => {
     });
 
     if (!cart) {
+      console.log("📦 Creando nuevo carrito con - userId:", userId || null, "| sessionId:", searchSessionId);
       cart = new Cart({
         userId: userId || null,
         sessionId: searchSessionId,
         items: []
       });
+    } else {
+      console.log("✅ Carrito existente encontrado - ID:", cart._id, "| sessionId guardado:", cart.sessionId);
     }
     const canAdd = await isPosibleAddToCartProduct(cart, productId);
     if (!canAdd) {
@@ -326,7 +333,7 @@ exports.replaceAnonymousCart = async (req, res) => {
         console.log("  - Cart ID:", c._id, "| userId:", c.userId, "| deletedAt:", c.deletedAt, "| items:", c.items.length);
       });
 
-      anonymousCart = await Cart.findOne({ sessionId, userId: null });
+      anonymousCart = await Cart.findOne({ sessionId, userId: null, deletedAt: null });
       console.log("📦 Carrito anónimo encontrado:", anonymousCart?.items.length || 0, "items");
       if (!anonymousCart) {
         console.log("⚠️ No se encontró carrito anónimo válido (userId: null, deletedAt: null)");
@@ -347,7 +354,7 @@ exports.replaceAnonymousCart = async (req, res) => {
 
     // 4. Eliminar carrito anónimo después de transferir items
     if (sessionId && anonymousCart) {
-      await Cart.deleteOne({ sessionId, userId: null });
+      await Cart.deleteOne({ sessionId, userId: null, deletedAt: null });
       console.log("🗑️ Carrito anónimo eliminado");
     }
 

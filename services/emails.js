@@ -1,6 +1,6 @@
-// Nodemailer es una biblioteca para enviar correos electrónicos desde Node.js
+// Brevo (anteriormente Sendinblue) es un servicio de email marketing y transaccional
 // Se utiliza para enviar correos electrónicos desde nuestra aplicación
-const nodemailer = require("nodemailer");
+const brevo = require('@getbrevo/brevo');
 
 // Handlebars es una biblioteca para renderizar plantillas de HTML
 // Se utiliza para renderizar plantillas de HTML con variables dinámicas
@@ -12,22 +12,12 @@ const fs = require("fs").promises;
 const path = require("path");
 require("dotenv").config();
 
-// Configuración del transportador de email
-const emailConfig = {
-    host: process.env.EMAIL_HOST || "gmail",
-    port: process.env.EMAIL_PORT || 587,
-    secure: process.env.EMAIL_SECURE === "true",
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-    tls: {
-        rejectUnauthorized: process.env.NODE_ENV === "production" ? true : false,
-    },
-};
-
-// Crear el transportador de nodemailer
-const transporter = nodemailer.createTransport(emailConfig);
+// Configurar el cliente de Brevo
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(
+    brevo.TransactionalEmailsApiApiKeys.apiKey,
+    process.env.BREVO_API_KEY
+);
 
 /**
  * Lee y compila una plantilla de email
@@ -75,18 +65,21 @@ async function sendEmail({
         // Generar el HTML del email
         const html = template(emailData);
 
-        // Configurar el email
-        const mailOptions = {
-            from: `Meraki Marketplace <${process.env.EMAIL_USER}>`,
-            to,
-            subject,
-            html,
+        // Configurar el email para Brevo
+        const sendSmtpEmail = new brevo.SendSmtpEmail();
+        sendSmtpEmail.sender = {
+            name: "Meraki Marketplace",
+            email: process.env.EMAIL_USER || "noreply@meraki.com"
         };
+        sendSmtpEmail.to = [{ email: to }];
+        sendSmtpEmail.subject = subject;
+        sendSmtpEmail.htmlContent = html;
 
-        // Enviar el email
-        const info = await transporter.sendMail(mailOptions);
-        return { success: true, messageId: info.messageId };
+        // Enviar el email con Brevo
+        const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        return { success: true, messageId: response.messageId };
     } catch (error) {
+        console.error("Error al enviar email con Brevo:", error);
         throw error;
     }
 }
@@ -235,7 +228,7 @@ const sendOrderConfirmationEmail = async ({
         `,
     };
     return sendEmail({
-        to: "mrodpir@gmail.com",
+        to: to,
         subject: "Confirmación de Pedido - Meraki Marketplace",
         templateData,
     });
@@ -349,7 +342,7 @@ const sendOrderNotificationToStoreEmail = async ({
         `,
     };
     return sendEmail({
-        to: "mrodpir@gmail.com",
+        to: to,
         subject: "Confirmación de Pedido - Meraki Marketplace",
         templateData,
     });

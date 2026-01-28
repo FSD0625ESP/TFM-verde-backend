@@ -60,7 +60,7 @@ const register = async (req, res) => {
         });
         res
           .status(201)
-          .send({ msg: "Usuario registrado correctamente", user: safeUser });
+          .send({ msg: "Usuario registrado correctamente", user: safeUser, token });
       }
     );
   } catch (error) {
@@ -92,7 +92,8 @@ const login = async (req, res) => {
         });
         const safeUser = user.toObject ? user.toObject() : user;
         delete safeUser.password;
-        res.status(200).send({ msg: "Inicio de sesión exitoso", user: safeUser });
+        // Enviar token también en body para fallback en navegación privada
+        res.status(200).send({ msg: "Inicio de sesión exitoso", user: safeUser, token });
       }
     );
   } catch (error) {
@@ -176,7 +177,7 @@ const googleLogin = async (req, res) => {
         delete safeUser.password;
         return res
           .status(200)
-          .send({ msg: "Login con Google exitoso", user: safeUser });
+          .send({ msg: "Login con Google exitoso", user: safeUser, token });
       }
     );
   } catch (error) {

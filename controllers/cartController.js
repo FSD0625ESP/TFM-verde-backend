@@ -40,6 +40,8 @@ exports.getCart = async (req, res) => {
   }
 };
 
+// 📌 Verificar si es posible añadir un producto al carrito (misma tienda) 
+//
 const isPosibleAddToCartProduct = (cart, newProductId) => {
   // si tienes productos de otra tienda no puedes añadir
   if (cart.items.length === 0) return true;
@@ -102,8 +104,17 @@ exports.addToCart = async (req, res) => {
     if (!canAdd) {
       return res.status(400).json({ message: "No puedes añadir productos de diferentes tiendas al carrito" });
     }
+    // verificar si hay stock suficiente
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+    if (product.stock < quantity) {
+      return res.status(400).json({ message: "No hay stock suficiente para este producto" });
+    }
+
     const existingItem = cart.items.find(
-      (item) => item.productId.toString() === productId
+      (item) => item.productId.toString() === productId.toString()
     );
 
     if (existingItem) {
